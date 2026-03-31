@@ -137,3 +137,71 @@ redacción y organización del contenido.
 
 El uso de estas herramientas se ha limitado a la generación de texto
 explicativo y no a la realización del desarrollo técnico del proyecto.
+
+## Puesta en marcha del proyecto
+
+### Requisitos previos
+
+-   Python 3.10 o superior  
+-   Node.js (para el frontend)  
+-   Docker Desktop  
+-   Git  
+-   (Opcional) DBeaver
+
+---
+
+### Base de datos (PostgreSQL con Docker)
+
+Levantar la base de datos:
+
+```bash
+docker compose up -d
+```
+
+Parar la base de datos:
+
+```bash
+docker compose down
+```
+
+Acceder a PostgreSQL:
+
+```bash
+docker exec -it lia_postgres psql -U postgres -d lia_db
+```
+
+### Backend (FastAPI)
+
+Entrar en la carpeta "backend":
+
+```bash
+cd backend
+```
+
+Crear entorno virtual:
+
+```bash
+python -m venv .venv
+```
+
+Activar entorno virtual (Windows):
+
+```bash
+.venv\Scripts\activate
+```
+
+Activar entorno virtual (Windows):
+
+```bash
+pip install -r requirements.txt
+```
+
+Ejecutar servidor:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+### Acceso a la API:
+
+[Doc FastAPI](http://127.0.0.1:8000/docs)
