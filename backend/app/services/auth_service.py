@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
+from app.repositories.role_repository import RoleRepository
 from app.schemas.user import UserCreate
 from app.core.security import hash_password, verify_password, create_access_token
 
@@ -23,6 +24,14 @@ class AuthService:
                 detail="El nombre de usuario ya está en uso"
             )
 
+        user_role = RoleRepository.get_by_name(db, "usuario")
+
+        if not user_role:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="El rol por defecto 'usuario' no existe"
+            )
+
         hashed_password = hash_password(user_data.contrasena)
 
         new_user = User(
@@ -32,7 +41,7 @@ class AuthService:
             contrasena=hashed_password,
             telefono=user_data.telefono,
             estado="activo",
-            rol_id=1
+            rol_id=user_role.id_rol
         )
 
         return UserRepository.create(db, new_user)
