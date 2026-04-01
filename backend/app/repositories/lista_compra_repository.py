@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.lista_compra import ListaCompra
@@ -24,3 +25,11 @@ class ListaCompraRepository:
             .order_by(ListaCompra.fecha_creacion.desc())
             .all()
         )
+
+    @staticmethod
+    def count_all(db: Session) -> int:
+        return db.query(func.count(ListaCompra.id_lista)).scalar() or 0
+
+    @staticmethod
+    def get_latest_created(db: Session) -> ListaCompra | None:
+        return db.query(ListaCompra).order_by(ListaCompra.fecha_creacion.desc()).first()
