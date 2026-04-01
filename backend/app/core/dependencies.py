@@ -7,14 +7,14 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
-
+from app.repositories.session_repository import SessionRepository
 
 security = HTTPBearer()
 
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> User:
     token = credentials.credentials
 
@@ -31,17 +31,26 @@ def get_current_user(
             algorithms=[settings.jwt_algorithm]
         )
         email: str | None = payload.get("sub")
+        token_type: str | None = payload.get("type")
 
-        if email is None:
+        if email is None or token_type != "access":
             raise credentials_exception
-
     except JWTError:
         raise credentials_exception
 
-    user = UserRepository.get_by_email(db, email)
+    sesion = SessionRepository.get_active_by_token(db, token)
+    if sesion is None:
+        raise credentials_exception
 
+    user = UserRepository.get_by_email(db, email)
     if user is None:
         raise credentials_exception
+
+    if user.estado != "activo":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuario inactivo"
+        )
 
     return user
 
