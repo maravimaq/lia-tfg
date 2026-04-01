@@ -17,6 +17,33 @@ class User(Base):
     telefono = Column(String, nullable=True)
     estado = Column(String, nullable=False, default="activo")
     fecha_registro = Column(DateTime, nullable=False, default=datetime.utcnow)
+    proveedor_auth = Column(String, nullable=False, default="local")
 
     rol_id = Column(Integer, ForeignKey("roles.id_rol"), nullable=False)
     rol = relationship("Role", back_populates="usuarios")
+
+    preferencias = relationship(
+        "PreferenciasUsuario",
+        back_populates="usuario",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    configuracion_bot = relationship(
+        "ConfiguracionBotExterno",
+        back_populates="usuario",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    sesiones = relationship(
+        "SesionAutenticacion",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+    )
+
+    solicitudes_baja = relationship(
+        "SolicitudBajaUsuario",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+    )
