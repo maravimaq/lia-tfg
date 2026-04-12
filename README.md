@@ -205,3 +205,191 @@ uvicorn app.main:app --reload
 ### Acceso a la API:
 
 [Doc FastAPI](http://127.0.0.1:8000/docs)
+
+
+### Frontend
+
+#### 1. Requisitos previos
+
+Antes de empezar, tener instalado:
+
+- Node.js (recomendado versión LTS)
+- npm (se instala junto con Node)
+- Git
+- Backend funcionando (FastAPI en puerto 8000)
+
+##### Comprobar instalaciones
+
+Ejecuta en terminal:
+
+```bash
+node -v
+npm -v
+git --version
+```
+
+---
+#### 2. Inicializar el proyecto frontend
+
+Desde la raíz del repositorio:
+
+```bash
+cd android-app
+npx create-expo-app@latest . --template
+```
+
+Cuando pregunte plantilla:
+
+Seleccionar: **blank (TypeScript)**
+
+#### 3. Instalar dependencias necesarias
+
+Dentro de `android-app`:
+
+```bash
+npm install axios react-hook-form zod @hookform/resolvers @react-native-async-storage/async-storage
+npx expo install expo-router react-native-safe-area-context react-native-screens react-native-gesture-handler react-native-reanimated expo-linking expo-constants expo-status-bar
+```
+
+---
+#### 4. Configuración obligatoria
+
+##### 4.1 package.json
+
+Abrir `android-app/package.json` y añadir/modificar:
+
+```json
+{
+  "main": "expo-router/entry"
+}
+```
+
+---
+##### 4.2 babel.config.js
+
+Crear archivo en `android-app/`:
+
+```js
+module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: ["babel-preset-expo"],
+    plugins: ["react-native-reanimated/plugin"],
+  };
+};
+```
+
+---
+
+##### 4.3 tsconfig.json
+
+Editar o crear:
+
+```json
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["*"]
+    }
+  }
+}
+```
+
+#### 5. Configurar conexión con backend
+
+Crear archivo:
+
+📄 `android-app/src/utils/env.ts`
+
+```ts
+export const API_BASE_URL = "http://TU_IP_LOCAL:8000";
+```
+##### Cómo saber tu IP
+
+En Windows:
+
+```bash
+ipconfig
+```
+
+Buscar:
+
+ Dirección IPv4 → usar esa IP
+
+---
+
+##### Ejemplos
+
+###### Móvil físico (Expo Go)
+
+```ts
+http://192.168.X.X:8000
+```
+
+###### Emulador Android
+
+```ts
+http://10.0.2.2:8000
+```
+
+---
+
+#### 6. Ejecutar el frontend
+
+Desde `android-app`:
+
+```bash
+npx expo start
+```
+
+---
+
+#### 7. Orden correcto para ejecutar TODO el proyecto
+
+##### 1. Base de datos
+
+```bash
+docker compose up -d
+```
+
+##### 2. Backend
+
+```bash
+cd backend
+.venv\Scripts\activate
+uvicorn app.main:app --reload
+```
+
+##### 3. Frontend
+
+```bash
+cd android-app
+npx expo start
+```
+
+---
+
+#### 8. Problemas comunes
+
+##### No conecta con backend
+
+Revisar IP en `env.ts`
+
+##### Error de dependencias
+
+Ejecutar:
+
+```bash
+npm install
+```
+
+##### Cambios no se reflejan
+
+```bash
+npx expo start -c
+```
+
+----
