@@ -1,6 +1,6 @@
-const LOCAL_IP = "TU_IP_LOCAL";
+const LOCAL_IP = "192.168.0.19";
 
 export const API_BASE_URL = __DEV__
-  ? `http://${LOCAL_IP}:8000`
+  ? `http://127.0.0.1:8000`
   : "https://api.lia.com";
   export const API_TIMEOUT = 10000;
