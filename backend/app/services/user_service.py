@@ -24,6 +24,8 @@ class UserService:
 
     @staticmethod
     def update_profile(db: Session, current_user: User, data: UserUpdate) -> User:
+        email_changed = False
+
         if data.email and data.email != current_user.email:
             existing = UserRepository.get_by_email(db, data.email)
             if existing:
@@ -32,6 +34,7 @@ class UserService:
                     detail="El email ya está registrado"
                 )
             current_user.email = data.email
+            email_changed = True
 
         if data.nombre_usuario and data.nombre_usuario != current_user.nombre_usuario:
             existing = UserRepository.get_by_username(db, data.nombre_usuario)
@@ -48,7 +51,12 @@ class UserService:
         if data.telefono is not None:
             current_user.telefono = data.telefono
 
-        return UserRepository.save(db, current_user)
+        updated_user = UserRepository.save(db, current_user)
+
+        if email_changed:
+            SessionRepository.revoke_all_user_sessions(db, current_user.id_usuario)
+
+        return updated_user
 
     @staticmethod
     def change_password(
