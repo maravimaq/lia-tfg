@@ -137,9 +137,62 @@ class AuthService:
         return UserRepository.create(db, new_user)
 
     @staticmethod
-    def login_with_google(db: Session, id_token: str) -> str:
-        external_user = verify_google_id_token(id_token)
-        user = AuthService._create_external_user_if_needed(db, external_user, "google")
+    def login_with_google(db: Session, google_id_token: str) -> str:
+        try:
+            token_info = id_token.verify_oauth2_token(
+                google_id_token,
+                google_requests.Request(),
+                settings.google_web_client_id,
+            )
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token de Google no válido"
+            )
+
+        email = token_info.get("email")
+        email_verified = token_info.get("email_verified", False)
+        full_name = token_info.get("name") or "Usuario Google"
+
+        if not email or not email_verified:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="La cuenta de Google no tiene un email válido/verificado"
+            )
+
+        user = UserRepository.get_by_email(db, email)
+
+        if not user:
+            user_role = RoleRepository.get_by_name(db, "usuario")
+
+            if not user_role:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="El rol por defecto 'usuario' no existe"
+                )
+
+            base_username = email.split("@")[0]
+            username = base_username
+            counter = 1
+
+            while UserRepository.get_by_username(db, username):
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            generated_password = hash_password("google-oauth-no-login-local")
+
+            new_user = User(
+                nombre_usuario=username,
+                nombre_completo=full_name,
+                email=email,
+                contrasena=generated_password,
+                telefono=None,
+                estado="activo",
+                rol_id=user_role.id_rol,
+                proveedor_auth="google",
+            )
+
+            user = UserRepository.create(db, new_user)
 
         if user.estado != "activo":
             raise HTTPException(
@@ -147,16 +200,7 @@ class AuthService:
                 detail="Usuario inactivo"
             )
 
-        access_token = create_access_token(data={"sub": user.email})
-
-        nueva_sesion = SesionAutenticacion(
-            proveedor="google",
-            token=access_token,
-            usuario_id=user.id_usuario,
-        )
-        SessionRepository.create(db, nueva_sesion)
-
-        return access_token
+        return create_access_token(data={"sub": user.email})
 
     @staticmethod
     def login_with_apple(db: Session, id_token: str) -> str:
@@ -253,3 +297,5 @@ class AuthService:
         return {
             "message": "Contraseña restablecida correctamente. Inicia sesión de nuevo."
         }
+
+        
