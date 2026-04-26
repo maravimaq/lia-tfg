@@ -10,6 +10,9 @@ class ListaCompraBase(BaseModel):
 class ListaCompraCreate(ListaCompraBase):
     pass
 
+class ListaCompraUpdate(BaseModel):
+    nombre_lista: str | None = None
+    compartida: bool | None = None
 
 class ListaCompraResponse(ListaCompraBase):
     id_lista: int

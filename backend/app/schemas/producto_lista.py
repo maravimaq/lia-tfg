@@ -13,6 +13,14 @@ class ProductoListaCreate(ProductoListaBase):
     lista_id: int
 
 
+class ProductoListaUpdate(BaseModel):
+    nombre_producto: str | None = None
+    cantidad: int | None = None
+    unidad_medida: str | None = None
+    supermercado: str | None = None
+    precio_estimado: float | None = None
+
+
 class ProductoListaResponse(ProductoListaBase):
     id_producto_lista: int
     lista_id: int

@@ -6,8 +6,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str
     access_token_expire_minutes: int
-    google_web_client_id: str
-
+    google_web_client_id: str | None = None
     model_config = SettingsConfigDict(env_file=".env")
 
 

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.lista_compra import ListaCompra
 from app.models.user import User
 from app.repositories.lista_compra_repository import ListaCompraRepository
-from app.schemas.lista_compra import ListaCompraCreate
+from app.schemas.lista_compra import ListaCompraCreate, ListaCompraUpdate
 
 
 class ListaCompraService:
@@ -50,7 +50,6 @@ class ListaCompraService:
                 detail="Lista no encontrada"
             )
 
-        # ownership simple (como hablamos)
         if lista.usuario_id != current_user.id_usuario:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -58,3 +57,31 @@ class ListaCompraService:
             )
 
         return lista
+
+    @staticmethod
+    def update_lista(
+        db: Session,
+        lista_id: int,
+        lista_data: ListaCompraUpdate,
+        current_user: User
+    ) -> ListaCompra:
+
+        lista = ListaCompraService.get_lista_by_id(db, lista_id, current_user)
+
+        update_data = lista_data.model_dump(exclude_unset=True)
+
+        for field, value in update_data.items():
+            setattr(lista, field, value)
+
+        return ListaCompraRepository.save(db, lista)
+
+    @staticmethod
+    def delete_lista(
+        db: Session,
+        lista_id: int,
+        current_user: User
+    ) -> None:
+
+        lista = ListaCompraService.get_lista_by_id(db, lista_id, current_user)
+
+        ListaCompraRepository.delete(db, lista)

@@ -29,16 +29,16 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     return {"access_token": token, "token_type": "bearer"}
 
 
-@router.post("/google", response_model=TokenResponse)
-def login_with_google(auth_data: ExternalAuthRequest, db: Session = Depends(get_db)):
-    token = AuthService.login_with_google(db, auth_data.id_token)
-    return {"access_token": token, "token_type": "bearer"}
+# @router.post("/google", response_model=TokenResponse)
+# def login_with_google(auth_data: ExternalAuthRequest, db: Session = Depends(get_db)):
+#     token = AuthService.login_with_google(db, auth_data.id_token)
+#     return {"access_token": token, "token_type": "bearer"}
 
 
-@router.post("/apple", response_model=TokenResponse)
-def login_with_apple(auth_data: ExternalAuthRequest, db: Session = Depends(get_db)):
-    token = AuthService.login_with_apple(db, auth_data.id_token)
-    return {"access_token": token, "token_type": "bearer"}
+# @router.post("/apple", response_model=TokenResponse)
+# def login_with_apple(auth_data: ExternalAuthRequest, db: Session = Depends(get_db)):
+#     token = AuthService.login_with_apple(db, auth_data.id_token)
+#     return {"access_token": token, "token_type": "bearer"}
 
 
 @router.post("/logout")
