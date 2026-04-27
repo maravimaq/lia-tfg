@@ -11,3 +11,6 @@ python-multipart
 email-validator
 alembic
 google-auth
+httpx
+beautifulsoup4
+pypdf
