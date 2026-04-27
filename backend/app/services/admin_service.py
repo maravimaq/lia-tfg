@@ -33,6 +33,8 @@ from app.schemas.admin import (
 
 
 class AdminService:
+    DEFAULT_PRICE_REGEX = r"(\d{1,3}(?:[\.,]\d{3})*[\.,]\d{1,2})\s?€?"
+
     _scraping_lock = threading.Lock()
     _scraping_state = {
         "ultima_ejecucion_fecha": "-",
@@ -44,6 +46,45 @@ class AdminService:
         "cancel_requested": False,
         "fuentes": [],
     }
+
+    @staticmethod
+    def _build_request_headers(url: str, *, json_preferred: bool = False) -> dict[str, str]:
+        parsed = url_parse.urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        return {
+            "User-Agent": settings.scraping_user_agent,
+            "Accept": "application/json,text/plain,*/*" if json_preferred else "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Referer": origin,
+            "Origin": origin,
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
+
+    @staticmethod
+    def _fetch_url(url: str, *, timeout_seconds: int | None = None) -> httpx.Response:
+        timeout = timeout_seconds or settings.scraping_timeout_seconds
+        attempts = [
+            {"json_preferred": url.endswith("/api/categories/") or "/api/" in url},
+            {"json_preferred": False},
+        ]
+        last_exc = None
+        for attempt in attempts:
+            try:
+                response = httpx.get(
+                    url,
+                    timeout=timeout,
+                    headers=AdminService._build_request_headers(url, json_preferred=attempt["json_preferred"]),
+                    follow_redirects=True,
+                )
+                response.raise_for_status()
+                return response
+            except Exception as exc:
+                last_exc = exc
+                continue
+        raise last_exc if last_exc else RuntimeError(f"No se pudo acceder a {url}")
 
     @staticmethod
     def _validate_estado(estado: str) -> str:
@@ -88,7 +129,7 @@ class AdminService:
                 "crawl_internal_links": True,
                 "link_include_regex": r"/categories/\d+",
                 "selector": None,
-                "price_regex": r"(\d+[\.,]\d{2})\s?€",
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
             },
             {
                 "supermercado": "Carrefour",
@@ -106,7 +147,7 @@ class AdminService:
                 "crawl_internal_links": False,
                 "link_include_regex": None,
                 "selector": None,
-                "price_regex": r"(\d+[\.,]\d{2})\s?€",
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
             },
             {
                 "supermercado": "DIA",
@@ -114,15 +155,19 @@ class AdminService:
                 "crawl_internal_links": True,
                 "link_include_regex": r"/.*/c/L\d+",
                 "selector": None,
-                "price_regex": r"(\d+[\.,]\d{2})\s?€",
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
             },
             {
                 "supermercado": "Lidl",
-                "urls": ["https://www.lidl.es/l/folletos"],
+                "urls": [
+                    "https://www.lidl.es/l/folletos",
+                    "https://www.lidl.es/c/alimentos/s10068374",
+                    "https://www.lidl.es/c/ofertas/s10067753",
+                ],
                 "crawl_internal_links": True,
-                "link_include_regex": r"/l/folletos/.+",
+                "link_include_regex": r"/(l/folletos/.+|c/.+/s\d+)",
                 "selector": None,
-                "price_regex": r"(\d+[\.,]\d{2})\s?€",
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
             },
         ]
 
@@ -155,8 +200,7 @@ class AdminService:
                         "crawl_internal_links": item.get("crawl_internal_links", True),
                         "link_include_regex": item.get("link_include_regex"),
                         "selector": item.get("selector"),
-                        "price_regex": item.get("price_regex")
-                        or r"(\d+[\.,]\d{2})\s?€",
+                        "price_regex": item.get("price_regex") or AdminService.DEFAULT_PRICE_REGEX,
                     }
                 )
 
@@ -179,8 +223,7 @@ class AdminService:
                     "crawl_internal_links": source.get("crawl_internal_links", True),
                     "link_include_regex": source.get("link_include_regex"),
                     "selector": source.get("selector"),
-                    "price_regex": source.get("price_regex")
-                    or r"(\d+[\.,]\d{2})\s?€",
+                    "price_regex": source.get("price_regex") or AdminService.DEFAULT_PRICE_REGEX,
                     "precios_detectados": 0,
                     "productos_actualizados": 0,
                     "warning": None,
@@ -199,30 +242,93 @@ class AdminService:
 
         if not texts:
             texts = [soup.get_text(" ", strip=True)]
+        texts.extend(script.get_text(" ", strip=True) for script in soup.find_all("script"))
 
         pattern = re.compile(price_regex)
         prices: list[float] = []
 
+        def parse_price(raw: str) -> float | None:
+            cleaned = raw.strip().replace("€", "").replace(" ", "")
+            if "," in cleaned and "." in cleaned:
+                if cleaned.rfind(",") > cleaned.rfind("."):
+                    cleaned = cleaned.replace(".", "").replace(",", ".")
+                else:
+                    cleaned = cleaned.replace(",", "")
+            else:
+                cleaned = cleaned.replace(",", ".")
+            try:
+                value = float(cleaned)
+                if value <= 0:
+                    return None
+                return value
+            except ValueError:
+                return None
+
         for text in texts:
             for match in pattern.findall(text):
                 raw = match if isinstance(match, str) else match[0]
-                normalized = raw.replace(".", "").replace(",", ".")
-                try:
-                    prices.append(float(normalized))
-                except ValueError:
-                    continue
+                parsed = parse_price(raw)
+                if parsed is not None:
+                    prices.append(parsed)
 
         # Fallback común para tiendas que inyectan precios en JSON dentro de scripts.
-        json_price_pattern = re.compile(r'"price"\s*:\s*"?(\d+[.,]\d{1,2})"?')
+        json_price_pattern = re.compile(
+            r'"(?:price|salePrice|unitPrice|amount|value)"\s*:\s*"?(\d+(?:[.,]\d{1,2})?)"?',
+            re.IGNORECASE,
+        )
         for text in texts:
             for raw in json_price_pattern.findall(text):
-                normalized = raw.replace(".", "").replace(",", ".")
+                parsed = parse_price(raw)
+                if parsed is not None:
+                    prices.append(parsed)
+
+        # Fallback adicional para SPAs: intenta decodificar JSON embebido completo
+        # y localizar cualquier campo relacionado con precio en estructuras profundas.
+        def collect_prices_from_obj(obj):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    key_lower = str(key).lower()
+                    if any(token in key_lower for token in ["price", "precio", "amount", "importe", "value"]):
+                        if isinstance(value, (int, float, str)):
+                            parsed = parse_price(str(value))
+                            if parsed is not None:
+                                prices.append(parsed)
+                    collect_prices_from_obj(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    collect_prices_from_obj(item)
+
+        for script in soup.find_all("script"):
+            raw_script = script.get_text(" ", strip=True)
+            if not raw_script or ("{" not in raw_script and "[" not in raw_script):
+                continue
+
+            candidates: list[str] = []
+            trimmed = raw_script.strip()
+            if trimmed.startswith("{") or trimmed.startswith("["):
+                candidates.append(trimmed)
+
+            for marker in ("=", "window.__", "INITIAL_STATE", "__NEXT_DATA__"):
+                marker_pos = raw_script.find(marker)
+                if marker_pos < 0:
+                    continue
+                start_obj = raw_script.find("{", marker_pos)
+                start_arr = raw_script.find("[", marker_pos)
+                starts = [pos for pos in (start_obj, start_arr) if pos >= 0]
+                if starts:
+                    candidates.append(raw_script[min(starts):].strip())
+
+            for candidate in candidates:
+                cleaned = candidate
+                if cleaned.endswith(";"):
+                    cleaned = cleaned[:-1]
                 try:
-                    prices.append(float(normalized))
-                except ValueError:
+                    parsed_json = json.loads(cleaned)
+                    collect_prices_from_obj(parsed_json)
+                except Exception:
                     continue
 
-        return prices
+        return sorted(set(prices))
 
     @staticmethod
     def _extract_prices_from_pdf(content: bytes, price_regex: str) -> list[float]:
@@ -252,16 +358,7 @@ class AdminService:
         max_urls: int = 40,
     ) -> list[str]:
         try:
-            response = httpx.get(
-                base_url,
-                timeout=settings.scraping_timeout_seconds,
-                headers={
-                    "User-Agent": settings.scraping_user_agent,
-                    "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
-                },
-                follow_redirects=True,
-            )
-            response.raise_for_status()
+            response = AdminService._fetch_url(base_url)
         except Exception:
             return [base_url]
 
@@ -298,16 +395,7 @@ class AdminService:
     @staticmethod
     def _discover_mercadona_category_urls(base_url: str) -> list[str]:
         try:
-            response = httpx.get(
-                "https://tienda.mercadona.es/api/categories/",
-                timeout=settings.scraping_timeout_seconds,
-                headers={
-                    "User-Agent": settings.scraping_user_agent,
-                    "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
-                },
-                follow_redirects=True,
-            )
-            response.raise_for_status()
+            response = AdminService._fetch_url("https://tienda.mercadona.es/api/categories/")
             data = response.json()
         except Exception:
             return [base_url]
@@ -327,8 +415,8 @@ class AdminService:
         if not ids:
             return [base_url]
 
-        urls = [base_url]
-        urls.extend([f"https://tienda.mercadona.es/categories/{cat_id}" for cat_id in sorted(ids)])
+        urls = [base_url, "https://tienda.mercadona.es/api/categories/"]
+        urls.extend([f"https://tienda.mercadona.es/api/categories/{cat_id}" for cat_id in sorted(ids)])
         return urls[:120]
 
     @staticmethod
@@ -412,16 +500,7 @@ class AdminService:
 
                     for url in candidate_urls:
                         try:
-                            response = httpx.get(
-                                url,
-                                timeout=settings.scraping_timeout_seconds,
-                                headers={
-                                    "User-Agent": settings.scraping_user_agent,
-                                    "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
-                                },
-                                follow_redirects=True,
-                            )
-                            response.raise_for_status()
+                            response = AdminService._fetch_url(url)
                             successful_responses += 1
 
                             is_pdf = (
@@ -432,13 +511,13 @@ class AdminService:
                             if is_pdf:
                                 prices = AdminService._extract_prices_from_pdf(
                                     response.content,
-                                    source.get("price_regex") or r"(\d+[\.,]\d{2})\s?€",
+                                    source.get("price_regex") or AdminService.DEFAULT_PRICE_REGEX,
                                 )
                             else:
                                 prices = AdminService._extract_prices(
                                     response.text,
                                     source.get("selector"),
-                                    source.get("price_regex") or r"(\d+[\.,]\d{2})\s?€",
+                                    source.get("price_regex") or AdminService.DEFAULT_PRICE_REGEX,
                                 )
 
                             all_prices.extend(prices)
@@ -755,14 +834,19 @@ class AdminService:
 
     @staticmethod
     def force_scraping() -> AdminScrapingActionResponse:
-        AdminService._ensure_state_sources_loaded()
-
         with AdminService._scraping_lock:
             if AdminService._scraping_state["en_curso"]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Ya hay un scraping en ejecución",
                 )
+
+            # Recargar fuentes en cada ejecución para aplicar cambios de configuración
+            # y mejoras de defaults sin reiniciar el servicio.
+            AdminService._scraping_state["fuentes"] = []
+        AdminService._ensure_state_sources_loaded()
+
+        with AdminService._scraping_lock:
 
             AdminService._scraping_state["en_curso"] = True
             AdminService._scraping_state["ultima_ejecucion_estado"] = "en_proceso"
