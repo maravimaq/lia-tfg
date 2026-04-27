@@ -71,3 +71,28 @@ class AdminDashboardResponse(BaseModel):
     ultimo_usuario_registrado: Optional[AdminDashboardLatestUser] = None
     ultima_lista_creada: Optional[AdminDashboardLatestList] = None
     actividad_reciente: list[str] = []
+
+
+class AdminScrapingStoreStatus(BaseModel):
+    supermercado: str
+    estado: str
+    fecha: str
+    precios_detectados: int = 0
+    productos_actualizados: int = 0
+    warning: Optional[str] = None
+    detalle_error: Optional[str] = None
+
+
+class AdminScrapingOverviewResponse(BaseModel):
+    ultima_ejecucion_fecha: str
+    ultima_ejecucion_estado: str
+    progreso_general: int
+    en_curso: bool
+    tiempo_restante_segundos: int
+    detalle_error: Optional[str] = None
+    fuentes: list[AdminScrapingStoreStatus]
+
+
+class AdminScrapingActionResponse(BaseModel):
+    message: str
+    status: str
