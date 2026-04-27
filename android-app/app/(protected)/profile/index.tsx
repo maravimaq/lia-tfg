@@ -170,6 +170,7 @@ export default function ProfileScreen() {
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         onLogout={handleLogout}
+        isAdmin={user?.rol_id === 2}
       />
     </Screen>
   );
