@@ -13,6 +13,7 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onLogout: () => void;
+  isAdmin?: boolean;
 };
 
 type MenuItemProps = {
@@ -33,6 +34,7 @@ export default function ProfileSideMenu({
   visible,
   onClose,
   onLogout,
+  isAdmin = false,
 }: Props) {
   return (
     <Modal
@@ -113,6 +115,16 @@ export default function ProfileSideMenu({
               onClose();
             }}
           />
+
+          {isAdmin ? (
+            <MenuItem
+              label="Panel de administración"
+              onPress={() => {
+                onClose();
+                router.push("/(protected)/admin");
+              }}
+            />
+          ) : null}
 
           <MenuItem
             label="Mi perfil"
