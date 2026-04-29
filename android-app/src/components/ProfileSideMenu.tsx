@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -36,6 +37,33 @@ export default function ProfileSideMenu({
   onLogout,
   isAdmin = false,
 }: Props) {
+  const confirmLogout = () => {
+    Alert.alert("Cerrar sesión", "¿Estás seguro de que quieres cerrar sesión?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Cerrar sesión",
+        style: "destructive",
+        onPress: () => {
+          onClose();
+          onLogout();
+        },
+      },
+    ]);
+  };
+
+  const confirmDelete = () => {
+    Alert.alert("Eliminar cuenta", "Esta acción enviará una solicitud de eliminación al administrador.", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Solicitar eliminación",
+        style: "destructive",
+        onPress: () => {
+          onClose();
+          router.push("/(protected)/profile/account-action");
+        },
+      },
+    ]);
+  };
   return (
     <Modal
       visible={visible}
@@ -57,6 +85,7 @@ export default function ProfileSideMenu({
             label="Configuración Bot Externo"
             onPress={() => {
               onClose();
+              router.push("/(protected)/profile/bot-config");
             }}
           />
 
@@ -64,6 +93,7 @@ export default function ProfileSideMenu({
             label="FAQ"
             onPress={() => {
               onClose();
+              router.push("/(protected)/profile/faq");
             }}
           />
 
@@ -71,6 +101,7 @@ export default function ProfileSideMenu({
             label="Sobre LIA"
             onPress={() => {
               onClose();
+              router.push("/(protected)/profile/about");
             }}
           />
 
@@ -78,6 +109,7 @@ export default function ProfileSideMenu({
             label="Ayuda y Soporte"
             onPress={() => {
               onClose();
+              router.push("/(protected)/profile/support");
             }}
           />
 
@@ -85,34 +117,7 @@ export default function ProfileSideMenu({
             label="Información de Contacto"
             onPress={() => {
               onClose();
-            }}
-          />
-
-          <MenuItem
-            label="Mis listas pendientes"
-            onPress={() => {
-              onClose();
-            }}
-          />
-
-          <MenuItem
-            label="Historial de listas"
-            onPress={() => {
-              onClose();
-            }}
-          />
-
-          <MenuItem
-            label="Comparador de precios"
-            onPress={() => {
-              onClose();
-            }}
-          />
-
-          <MenuItem
-            label="Listas compartidas"
-            onPress={() => {
-              onClose();
+              router.push("/(protected)/profile/contact-info");
             }}
           />
 
@@ -136,22 +141,9 @@ export default function ProfileSideMenu({
 
           <View style={styles.separator} />
 
-          <MenuItem
-            label="Cerrar sesión"
-            onPress={() => {
-              onClose();
-              onLogout();
-            }}
-            danger
-          />
+          <MenuItem label="Cerrar sesión" onPress={confirmLogout} danger />
 
-          <MenuItem
-            label="Eliminar cuenta"
-            onPress={() => {
-              onClose();
-            }}
-            danger
-          />
+          <MenuItem label="Eliminar cuenta" onPress={confirmDelete} danger />
 
           <Text style={styles.footer}>© 2025-2026 LIA</Text>
         </View>
