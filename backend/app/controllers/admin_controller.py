@@ -6,6 +6,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.admin import (
     AdminDashboardResponse,
+    AdminScrapingActionResponse,
+    AdminScrapingOverviewResponse,
     AdminUserCreate,
     AdminUserListItem,
     AdminUsersPageResponse,
@@ -98,3 +100,23 @@ def delete_user(
     current_user: User = Depends(require_role("administrador"))
 ):
     return AdminService.delete_user(db, user_id)
+
+@router.get("/scraping/overview", response_model=AdminScrapingOverviewResponse)
+def get_scraping_overview(
+    current_user: User = Depends(require_role("administrador"))
+):
+    return AdminService.get_scraping_overview()
+
+
+@router.post("/scraping/force", response_model=AdminScrapingActionResponse)
+def force_scraping(
+    current_user: User = Depends(require_role("administrador"))
+):
+    return AdminService.force_scraping()
+
+
+@router.post("/scraping/cancel", response_model=AdminScrapingActionResponse)
+def cancel_scraping(
+    current_user: User = Depends(require_role("administrador"))
+):
+    return AdminService.cancel_scraping()
