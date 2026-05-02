@@ -7,8 +7,7 @@ from app.models.user import User
 from app.schemas.producto_lista import ProductoListaCreate, ProductoListaResponse
 from app.services.producto_lista_service import ProductoListaService
 
-router = APIRouter(prefix="/productos", tags=["productos"])
-
+router = APIRouter(prefix="/productos-lista", tags=["productos-lista"])
 
 @router.post("", response_model=ProductoListaResponse)
 def create_producto(
