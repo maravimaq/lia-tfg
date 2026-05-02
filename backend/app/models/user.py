@@ -18,6 +18,7 @@ class User(Base):
     estado = Column(String, nullable=False, default="activo")
     fecha_registro = Column(DateTime, nullable=False, default=datetime.utcnow)
     proveedor_auth = Column(String, nullable=False, default="local")
+    avatar_url = Column(String, nullable=True)
 
     rol_id = Column(Integer, ForeignKey("roles.id_rol"), nullable=False)
     rol = relationship("Role", back_populates="usuarios")
@@ -45,5 +46,31 @@ class User(Base):
     solicitudes_baja = relationship(
         "SolicitudBajaUsuario",
         back_populates="usuario",
+        cascade="all, delete-orphan",
+    )
+    siguiendo = relationship(
+        "SeguimientoUsuario",
+        foreign_keys="SeguimientoUsuario.seguidor_id",
+        back_populates="seguidor",
+        cascade="all, delete-orphan",
+    )
+
+    seguidores = relationship(
+        "SeguimientoUsuario",
+        foreign_keys="SeguimientoUsuario.seguido_id",
+        back_populates="seguido",
+        cascade="all, delete-orphan",
+    )
+    solicitudes_enviadas = relationship(
+        "SolicitudSeguimiento",
+        foreign_keys="SolicitudSeguimiento.solicitante_id",
+        back_populates="solicitante",
+        cascade="all, delete-orphan",
+    )
+
+    solicitudes_recibidas = relationship(
+        "SolicitudSeguimiento",
+        foreign_keys="SolicitudSeguimiento.destinatario_id",
+        back_populates="destinatario",
         cascade="all, delete-orphan",
     )

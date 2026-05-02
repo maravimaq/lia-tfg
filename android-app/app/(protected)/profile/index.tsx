@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -12,16 +12,13 @@ import { router } from "expo-router";
 
 import Screen from "@/src/components/Screen";
 import ProfileSideMenu from "@/src/components/ProfileSideMenu";
+import AppInput from "@/src/components/AppInput";
+import AppButton from "@/src/components/AppButton";
 import { useAuth } from "@/src/hooks/useAuth";
 import { Colors } from "@/src/constants/colors";
 import { profileImageStorage } from "@/src/lib/profileImage";
-
-const commonFriends: {
-  id: number;
-  name: string;
-  email: string;
-  avatar: string;
-}[] = [];
+import { userService } from "@/src/services/user";
+import { DiscoverUserResponse, IncomingFollowRequestItem } from "@/src/types/user";
 
 function getInitials(name?: string) {
   if (!name) return "L";
@@ -33,10 +30,36 @@ function getInitials(name?: string) {
     .toUpperCase();
 }
 
+function getAvatarFallback(name?: string) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || "LIA")}&background=7F83F5&color=fff`;
+}
+
 export default function ProfileScreen() {
   const { user, refreshProfile, signOut } = useAuth();
   const [menuVisible, setMenuVisible] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [users, setUsers] = useState<DiscoverUserResponse[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<IncomingFollowRequestItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [followingUserId, setFollowingUserId] = useState<number | null>(null);
+  const [requestActionId, setRequestActionId] = useState<number | null>(null);
+
+  const loadFriendsData = async (query = "") => {
+    setFriendsLoading(true);
+    try {
+      const [discovery, incoming] = await Promise.all([
+        userService.discoverUsers(query),
+        userService.getIncomingFollowRequests(),
+      ]);
+      setUsers(discovery);
+      setIncomingRequests(incoming);
+    } catch (error: any) {
+      Alert.alert("Error", error?.response?.data?.detail || "No se pudo cargar la sección de amigos");
+    } finally {
+      setFriendsLoading(false);
+    }
+  };
 
   useEffect(() => {
     refreshProfile().catch(() => undefined);
@@ -44,7 +67,22 @@ export default function ProfileScreen() {
     profileImageStorage.get().then((uri) => {
       if (uri) setImageUri(uri);
     });
+
+    loadFriendsData().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      loadFriendsData(search).catch(() => undefined);
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [search]);
+
+  const incomingCountLabel = useMemo(() => {
+    if (incomingRequests.length === 0) return "Sin solicitudes pendientes";
+    return `${incomingRequests.length} solicitud(es) pendiente(s)`;
+  }, [incomingRequests.length]);
 
   const handlePickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -75,6 +113,30 @@ export default function ProfileScreen() {
     } catch (error) {
       console.log("Error al cerrar sesión:", error);
       router.replace("/(auth)/sign-in");
+    }
+  };
+
+  const handleSendFollowRequest = async (targetUserId: number) => {
+    try {
+      setFollowingUserId(targetUserId);
+      await userService.sendFollowRequest(targetUserId);
+      await loadFriendsData(search);
+    } catch (error: any) {
+      Alert.alert("Error", error?.response?.data?.detail || "No se pudo enviar la solicitud");
+    } finally {
+      setFollowingUserId(null);
+    }
+  };
+
+  const handleRespondRequest = async (requestId: number, action: "aceptar" | "rechazar") => {
+    try {
+      setRequestActionId(requestId);
+      await userService.respondFollowRequest(requestId, action);
+      await loadFriendsData(search);
+    } catch (error: any) {
+      Alert.alert("Error", error?.response?.data?.detail || "No se pudo procesar la solicitud");
+    } finally {
+      setRequestActionId(null);
     }
   };
 
@@ -109,7 +171,7 @@ export default function ProfileScreen() {
           <Text style={[styles.tabText, styles.tabTextActive]}>Información Personal</Text>
         </View>
 
-        <Pressable style={styles.tab} onPress={() => router.push("/(protected)/profile/preferences")}>
+         <Pressable style={styles.tab} onPress={() => router.push("/(protected)/preferences")}>
           <Text style={styles.tabText}>Preferencias</Text>
         </Pressable>
 
@@ -145,22 +207,80 @@ export default function ProfileScreen() {
 
         <View style={styles.separator} />
 
-        <Text style={styles.friendsTitle}>Amigos</Text>
+        <Text style={styles.requestCounter}>{incomingCountLabel}</Text>
 
-        {commonFriends.length === 0 ? (
-          <View style={styles.emptyFriendsBox}>
-            <Text style={styles.emptyFriendsText}>
-              Todavía no tienes amigos o contactos en común para mostrar.
-            </Text>
-          </View>
-        ) : (
-          commonFriends.map((friend) => (
-            <View key={friend.id} style={styles.friendRow}>
-              <Image source={{ uri: friend.avatar }} style={styles.friendAvatar} />
-              <View>
-                <Text style={styles.friendName}>{friend.name}</Text>
-                <Text style={styles.friendEmail}>{friend.email}</Text>
+        {incomingRequests.length > 0 ? (
+          <View style={styles.requestsBox}>
+            {incomingRequests.map((request) => (
+              <View key={request.id_solicitud_seguimiento} style={styles.requestRow}>
+                <Image
+                  source={{ uri: request.solicitante.avatar_url || getAvatarFallback(request.solicitante.nombre_completo) }}
+                  style={styles.friendAvatar}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.friendName}>{request.solicitante.nombre_completo}</Text>
+                  <Text style={styles.friendEmail}>@{request.solicitante.nombre_usuario}</Text>
+                </View>
+                <View style={styles.requestActions}>
+                  <AppButton
+                    title="Aceptar"
+                    variant="secondary"
+                    onPress={() => handleRespondRequest(request.id_solicitud_seguimiento, "aceptar")}
+                    disabled={requestActionId === request.id_solicitud_seguimiento}
+                    style={styles.smallButton}
+                  />
+                  <AppButton
+                    title="Rechazar"
+                    variant="ghost"
+                    onPress={() => handleRespondRequest(request.id_solicitud_seguimiento, "rechazar")}
+                    disabled={requestActionId === request.id_solicitud_seguimiento}
+                    style={styles.smallButton}
+                  />
+                </View>
               </View>
+            ))}
+          </View>
+          ) : null}
+
+        <AppInput
+          label="Buscar usuarios"
+          placeholder="Por usuario, nombre o correo"
+          value={search}
+          onChangeText={setSearch}
+        />
+
+        {friendsLoading ? (
+          <Text style={styles.emptyFriendsText}>Cargando usuarios...</Text>
+        ) : users.length === 0 ? (
+          <Text style={styles.emptyFriendsText}>No hay usuarios para mostrar.</Text>
+        ) : (
+          users.map((person) => (
+            <View key={person.id_usuario} style={styles.friendRow}>
+              <Image
+                source={{ uri: person.avatar_url || getAvatarFallback(person.nombre_completo) }}
+                style={styles.friendAvatar}
+              />
+              <Pressable
+                style={{ flex: 1 }}
+                onPress={() => router.push(`/(protected)/profile/user/${person.id_usuario}`)}
+              >
+                <Text style={styles.friendName}>{person.nombre_completo}</Text>
+                <Text style={styles.friendEmail}>{person.email}</Text>
+              </Pressable>
+
+              <AppButton
+                title={
+                  person.follow_status === "followed"
+                    ? "Seguido"
+                    : person.follow_status === "pending"
+                    ? "Pendiente"
+                    : "Seguir"
+                }
+                variant={person.follow_status === "none" ? "secondary" : "ghost"}
+                onPress={() => handleSendFollowRequest(person.id_usuario)}
+                disabled={person.follow_status !== "none" || followingUserId === person.id_usuario}
+                style={styles.followButton}
+              />
             </View>
           ))
         )}
@@ -170,6 +290,7 @@ export default function ProfileScreen() {
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         onLogout={handleLogout}
+        isAdmin={user?.rol_id === 2}
       />
     </Screen>
   );
@@ -304,33 +425,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: Colors.title,
-    marginBottom: 12,
+    marginBottom: 4,
   },
-  emptyFriendsBox: {
-    minHeight: 90,
-    borderRadius: 16,
+  requestCounter: {
+    marginBottom: 12,
+    color: Colors.textMuted,
+  },
+  requestsBox: {
     borderWidth: 1,
     borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-    padding: 16,
+    borderRadius: 16,
+    padding: 10,
+    marginBottom: 12,
+    backgroundColor: Colors.card,
+  },
+  requestRow: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  requestActions: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  smallButton: {
+    minHeight: 36,
     justifyContent: "center",
   },
   emptyFriendsText: {
     textAlign: "center",
     color: Colors.textMuted,
     lineHeight: 22,
+    marginVertical: 8,
   },
   friendRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+    gap: 10,
   },
   friendAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
   },
   friendName: {
     fontSize: 14,
@@ -340,5 +478,9 @@ const styles = StyleSheet.create({
   friendEmail: {
     fontSize: 12,
     color: Colors.textMuted,
+  },
+  followButton: {
+    minHeight: 36,
+    minWidth: 88,
   },
 });

@@ -91,3 +91,23 @@ class UserRepository:
         )
 
         return items, total
+
+    @staticmethod
+    def discover_users(
+        db: Session,
+        current_user_id: int,
+        search: str | None = None,
+    ) -> list[User]:
+        query = db.query(User).filter(User.id_usuario != current_user_id)
+
+        if search:
+            like_term = f"%{search.strip()}%"
+            query = query.filter(
+                or_(
+                    User.nombre_usuario.ilike(like_term),
+                    User.nombre_completo.ilike(like_term),
+                    User.email.ilike(like_term),
+                )
+            )
+
+        return query.order_by(User.nombre_completo.asc()).all()    

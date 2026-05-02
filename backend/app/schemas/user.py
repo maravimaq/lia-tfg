@@ -9,6 +9,7 @@ class UserBase(BaseModel):
     nombre_completo: str
     email: EmailStr
     telefono: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -24,6 +25,7 @@ class UserUpdate(BaseModel):
     nombre_completo: Optional[str] = None
     email: Optional[EmailStr] = None
     telefono: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):

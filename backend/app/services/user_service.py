@@ -6,13 +6,17 @@ from app.models.configuracion_bot_externo import ConfiguracionBotExterno
 from app.models.preferencias_usuario import PreferenciasUsuario
 from app.models.solicitud_baja_usuario import SolicitudBajaUsuario
 from app.models.user import User
+from app.models.seguimiento_usuario import SeguimientoUsuario
+from app.models.solicitud_seguimiento import SolicitudSeguimiento
 from app.repositories.account_request_repository import AccountRequestRepository
 from app.repositories.bot_config_repository import BotConfigRepository
+from app.repositories.follow_repository import FollowRepository
 from app.repositories.preferences_repository import PreferencesRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.account_request import AccountActionRequestCreate
 from app.schemas.bot_config import BotConfigUpdate
+from app.schemas.follow import FollowRequestAction
 from app.schemas.preferences import PreferenciasUpdate
 from app.schemas.user import ChangePasswordRequest, UserUpdate
 
@@ -50,6 +54,9 @@ class UserService:
 
         if data.telefono is not None:
             current_user.telefono = data.telefono
+
+        if data.avatar_url is not None:
+            current_user.avatar_url = data.avatar_url
 
         updated_user = UserRepository.save(db, current_user)
 
@@ -173,3 +180,145 @@ class UserService:
         )
 
         return AccountRequestRepository.create(db, solicitud)
+
+    @staticmethod
+    def discover_users(db: Session, current_user: User, search: str | None = None):
+        users = UserRepository.discover_users(db, current_user.id_usuario, search)
+        results = []
+
+        for user in users:
+            follow = FollowRepository.get_follow(db, current_user.id_usuario, user.id_usuario)
+            request = FollowRepository.get_request_between(db, current_user.id_usuario, user.id_usuario)
+
+            status = "none"
+            if follow is not None:
+                status = "followed"
+            elif request is not None and request.estado == "pendiente":
+                status = "pending"
+
+            results.append(
+                {
+                    "id_usuario": user.id_usuario,
+                    "nombre_usuario": user.nombre_usuario,
+                    "nombre_completo": user.nombre_completo,
+                    "email": user.email,
+                    "avatar_url": user.avatar_url,
+                    "follow_status": status,
+                    "_followed_at": follow.fecha_seguimiento if follow else None,
+                }
+            )
+
+        followed = [item for item in results if item["follow_status"] == "followed"]
+        pending_or_none = [item for item in results if item["follow_status"] != "followed"]
+
+        followed.sort(key=lambda item: item["_followed_at"], reverse=True)
+        pending_or_none.sort(key=lambda item: item["nombre_completo"].lower())
+
+        ordered = followed + pending_or_none
+
+        for item in ordered:
+            item.pop("_followed_at", None)
+
+        return ordered
+
+    @staticmethod
+    def request_follow(db: Session, current_user: User, target_user_id: int):
+        if current_user.id_usuario == target_user_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No puedes seguirte a ti mismo")
+
+        target = UserRepository.get_by_id(db, target_user_id)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario destino no encontrado")
+
+        existing_follow = FollowRepository.get_follow(db, current_user.id_usuario, target_user_id)
+        if existing_follow is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ya sigues a este usuario")
+
+        existing_request = FollowRepository.get_request_between(db, current_user.id_usuario, target_user_id)
+        if existing_request and existing_request.estado == "pendiente":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ya existe una solicitud pendiente")
+
+        solicitud = SolicitudSeguimiento(
+            solicitante_id=current_user.id_usuario,
+            destinatario_id=target_user_id,
+            estado="pendiente",
+        )
+
+        return FollowRepository.create_request(db, solicitud)
+
+    @staticmethod
+    def get_incoming_follow_requests(db: Session, current_user: User):
+        requests = FollowRepository.get_incoming_pending_requests(db, current_user.id_usuario)
+        response = []
+
+        for req in requests:
+            solicitante = req.solicitante
+            response.append(
+                {
+                    "id_solicitud_seguimiento": req.id_solicitud_seguimiento,
+                    "estado": req.estado,
+                    "fecha_solicitud": req.fecha_solicitud,
+                    "solicitante": {
+                        "id_usuario": solicitante.id_usuario,
+                        "nombre_usuario": solicitante.nombre_usuario,
+                        "nombre_completo": solicitante.nombre_completo,
+                        "email": solicitante.email,
+                        "avatar_url": solicitante.avatar_url,
+                        "follow_status": "none",
+                    },
+                }
+            )
+
+        return response
+
+    @staticmethod
+    def respond_follow_request(
+        db: Session,
+        current_user: User,
+        request_id: int,
+        action: FollowRequestAction,
+    ):
+        req = FollowRepository.get_request_by_id(db, request_id)
+        if req is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solicitud no encontrada")
+
+        if req.destinatario_id != current_user.id_usuario:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes responder esta solicitud")
+
+        if action.accion not in {"aceptar", "rechazar"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Acción inválida")
+
+        if action.accion == "rechazar":
+            FollowRepository.delete_request(db, req)
+            return {"message": "Solicitud rechazada"}
+
+        req.estado = "aceptada"
+        FollowRepository.save_request(db, req)
+
+        if FollowRepository.get_follow(db, req.solicitante_id, req.destinatario_id) is None:
+            follow = SeguimientoUsuario(
+                seguidor_id=req.solicitante_id,
+                seguido_id=req.destinatario_id,
+            )
+            FollowRepository.create_follow(db, follow)
+
+        return {"message": "Solicitud aceptada"}
+
+    @staticmethod
+    def get_public_profile(db: Session, user_id: int):
+        user = UserRepository.get_by_id(db, user_id)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+        return {
+            "id_usuario": user.id_usuario,
+            "nombre_usuario": user.nombre_usuario,
+            "nombre_completo": user.nombre_completo,
+            "email": user.email,
+            "avatar_url": user.avatar_url,
+            "estado": user.estado,
+            "fecha_registro": user.fecha_registro,
+            "rol_id": user.rol_id,
+            "proveedor_auth": user.proveedor_auth,
+            "telefono": user.telefono,
+        }
