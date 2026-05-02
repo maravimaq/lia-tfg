@@ -4,6 +4,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.lista_compra import ListaCompra
 from app.models.historial_listas import HistorialListas
+from app.models.historial_producto_lista import HistorialProductoLista
 from app.models.producto_lista import ProductoLista
 from app.models.producto import Producto
 from app.models.preferencias_usuario import PreferenciasUsuario

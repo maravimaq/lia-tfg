@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.historial_producto_lista import HistorialProductoListaResponse
+
 
 class HistorialListasBase(BaseModel):
     estado: str = "finalizada"
@@ -21,3 +23,6 @@ class HistorialListasResponse(HistorialListasBase):
     usuario_id: int
 
     model_config = ConfigDict(from_attributes=True)
+    
+class HistorialListasDetalleResponse(HistorialListasResponse):
+    productos: list[HistorialProductoListaResponse]
