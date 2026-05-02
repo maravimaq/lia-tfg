@@ -1,20 +1,25 @@
+from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
-
-class ProductoListaBase(BaseModel):
-    nombre_producto: str
-    cantidad: int = 1
-    unidad_medida: str | None = None
-    supermercado: str | None = None
-    precio_estimado: float = 0
+from app.schemas.producto import ProductoResponse
 
 
-class ProductoListaCreate(ProductoListaBase):
+class ProductoListaCreate(BaseModel):
     lista_id: int
+    producto_id: int
+    cantidad: int = 1
 
 
-class ProductoListaResponse(ProductoListaBase):
+class ProductoListaUpdate(BaseModel):
+    cantidad: int | None = None
+
+
+class ProductoListaResponse(BaseModel):
     id_producto_lista: int
     lista_id: int
+    producto_id: int
+    cantidad: int
+    precio_estimado: Decimal
+    producto: ProductoResponse
 
     model_config = ConfigDict(from_attributes=True)
