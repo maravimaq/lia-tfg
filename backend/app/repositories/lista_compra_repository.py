@@ -33,6 +33,11 @@ class ListaCompraRepository:
         return lista
 
     @staticmethod
+    def delete(db: Session, lista: ListaCompra) -> None:
+        db.delete(lista)
+        db.commit()
+
+    @staticmethod
     def count_all(db: Session) -> int:
         return db.query(func.count(ListaCompra.id_lista)).scalar() or 0
 
