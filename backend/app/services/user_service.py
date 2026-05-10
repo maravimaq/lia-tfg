@@ -167,19 +167,28 @@ class UserService:
             db,
             current_user.id_usuario,
         )
+
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ya existe una solicitud pendiente para esta cuenta"
+            existing.tipo = data.tipo
+            existing.motivo = data.motivo
+            db.add(existing)
+            db.commit()
+            db.refresh(existing)
+            created_request = existing
+        else:
+            solicitud = SolicitudBajaUsuario(
+                tipo=data.tipo,
+                motivo=data.motivo,
+                usuario_id=current_user.id_usuario,
             )
+            created_request = AccountRequestRepository.create(db, solicitud)
 
-        solicitud = SolicitudBajaUsuario(
-            tipo=data.tipo,
-            motivo=data.motivo,
-            usuario_id=current_user.id_usuario,
-        )
+        if data.tipo == "eliminacion":
+            current_user.estado = "inactivo"
+            UserRepository.save(db, current_user)
+            SessionRepository.revoke_all_user_sessions(db, current_user.id_usuario)
 
-        return AccountRequestRepository.create(db, solicitud)
+        return created_request
 
     @staticmethod
     def discover_users(db: Session, current_user: User, search: str | None = None):
