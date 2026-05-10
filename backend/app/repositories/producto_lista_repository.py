@@ -23,3 +23,14 @@ class ProductoListaRepository:
         return db.query(ProductoLista).filter(
             ProductoLista.lista_id == lista_id
         ).all()
+
+    @staticmethod
+    def save(db: Session, producto: ProductoLista) -> ProductoLista:
+        db.commit()
+        db.refresh(producto)
+        return producto
+
+    @staticmethod
+    def delete(db: Session, producto: ProductoLista) -> None:
+        db.delete(producto)
+        db.commit()
