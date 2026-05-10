@@ -1,8 +1,10 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.models.lista_compra import ListaCompra
 from app.models.producto_lista import ProductoLista
 from app.models.user import User
+from app.repositories.lista_compartida_repository import ListaCompartidaRepository
 from app.repositories.lista_compra_repository import ListaCompraRepository
 from app.repositories.producto_lista_repository import ProductoListaRepository
 from app.repositories.producto_repository import ProductoRepository
@@ -10,6 +12,23 @@ from app.schemas.producto_lista import ProductoListaCreate, ProductoListaUpdate
 
 
 class ProductoListaService:
+
+    @staticmethod
+    def _usuario_tiene_acceso(
+        db: Session,
+        lista: ListaCompra,
+        current_user: User
+    ) -> bool:
+        if lista.usuario_id == current_user.id_usuario:
+            return True
+
+        comparticion = ListaCompartidaRepository.get_by_lista_and_usuario(
+            db,
+            lista.id_lista,
+            current_user.id_usuario
+        )
+
+        return comparticion is not None
 
     @staticmethod
     def _recalcular_total_lista(db: Session, lista_id: int) -> None:
@@ -40,7 +59,7 @@ class ProductoListaService:
                 detail="Lista no encontrada"
             )
 
-        if lista.usuario_id != current_user.id_usuario:
+        if not ProductoListaService._usuario_tiene_acceso(db, lista, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para modificar esta lista"
@@ -86,7 +105,7 @@ class ProductoListaService:
                 detail="Lista no encontrada"
             )
 
-        if lista.usuario_id != current_user.id_usuario:
+        if not ProductoListaService._usuario_tiene_acceso(db, lista, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para acceder a esta lista"
@@ -116,7 +135,7 @@ class ProductoListaService:
                 detail="Lista asociada no encontrada"
             )
 
-        if lista.usuario_id != current_user.id_usuario:
+        if not ProductoListaService._usuario_tiene_acceso(db, lista, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para acceder a este producto"
