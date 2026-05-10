@@ -3,6 +3,7 @@ from app.db.session import Base
 from app.models.role import Role
 from app.models.user import User
 from app.models.lista_compra import ListaCompra
+from app.models.lista_compartida import ListaCompartida
 from app.models.historial_listas import HistorialListas
 from app.models.historial_producto_lista import HistorialProductoLista
 from app.models.producto_lista import ProductoLista

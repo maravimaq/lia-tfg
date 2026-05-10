@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models.lista_compra import ListaCompra
 from app.models.user import User
+from app.repositories.lista_compartida_repository import ListaCompartidaRepository
 from app.repositories.lista_compra_repository import ListaCompraRepository
 from app.repositories.producto_lista_repository import ProductoListaRepository
 from app.schemas.lista_compra import (
@@ -12,6 +13,30 @@ from app.schemas.lista_compra import (
 
 
 class ListaCompraService:
+
+    @staticmethod
+    def _usuario_tiene_acceso(
+        db: Session,
+        lista: ListaCompra,
+        current_user: User
+    ) -> bool:
+        if lista.usuario_id == current_user.id_usuario:
+            return True
+
+        comparticion = ListaCompartidaRepository.get_by_lista_and_usuario(
+            db,
+            lista.id_lista,
+            current_user.id_usuario
+        )
+
+        return comparticion is not None
+
+    @staticmethod
+    def _usuario_es_propietario(
+        lista: ListaCompra,
+        current_user: User
+    ) -> bool:
+        return lista.usuario_id == current_user.id_usuario
 
     @staticmethod
     def create_lista(
@@ -54,7 +79,7 @@ class ListaCompraService:
                 detail="Lista no encontrada"
             )
 
-        if lista.usuario_id != current_user.id_usuario:
+        if not ListaCompraService._usuario_tiene_acceso(db, lista, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para acceder a esta lista"
@@ -92,11 +117,19 @@ class ListaCompraService:
         current_user: User
     ) -> ListaCompra:
 
-        lista = ListaCompraService.get_lista_by_id(
-            db,
-            lista_id,
-            current_user
-        )
+        lista = ListaCompraRepository.get_by_id(db, lista_id)
+
+        if not lista:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista no encontrada"
+            )
+
+        if not ListaCompraService._usuario_es_propietario(lista, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo el propietario puede editar la lista"
+            )
 
         update_data = lista_data.model_dump(exclude_unset=True)
 
@@ -112,11 +145,19 @@ class ListaCompraService:
         current_user: User
     ):
 
-        lista = ListaCompraService.get_lista_by_id(
-            db,
-            lista_id,
-            current_user
-        )
+        lista = ListaCompraRepository.get_by_id(db, lista_id)
+
+        if not lista:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista no encontrada"
+            )
+
+        if not ListaCompraService._usuario_es_propietario(lista, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo el propietario puede eliminar la lista"
+            )
 
         productos = ProductoListaRepository.get_by_lista_id(db, lista_id)
 
