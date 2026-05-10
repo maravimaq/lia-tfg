@@ -32,3 +32,34 @@ class ProductoRepository:
     def delete(db: Session, producto: Producto) -> None:
         db.delete(producto)
         db.commit()
+        
+    @staticmethod
+    def search(
+        db: Session,
+        nombre: str | None = None,
+        categoria: str | None = None,
+        supermercado: str | None = None,
+        marca: str | None = None,
+        orden_precio: str | None = None
+    ) -> list[Producto]:
+
+        query = db.query(Producto)
+
+        if nombre:
+            query = query.filter(Producto.nombre.ilike(f"%{nombre}%"))
+
+        if categoria:
+            query = query.filter(Producto.categoria.ilike(f"%{categoria}%"))
+
+        if supermercado:
+            query = query.filter(Producto.supermercado.ilike(f"%{supermercado}%"))
+
+        if marca:
+            query = query.filter(Producto.marca.ilike(f"%{marca}%"))
+
+        if orden_precio == "asc":
+            query = query.order_by(Producto.precio_unitario.asc())
+        elif orden_precio == "desc":
+            query = query.order_by(Producto.precio_unitario.desc())
+
+        return query.all()
