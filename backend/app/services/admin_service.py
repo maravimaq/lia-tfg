@@ -17,6 +17,7 @@ from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.producto_lista import ProductoLista
 from app.models.user import User
+from app.repositories.account_request_repository import AccountRequestRepository
 from app.repositories.lista_compra_repository import ListaCompraRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
@@ -620,6 +621,8 @@ class AdminService:
         ultimo_usuario = UserRepository.get_latest_registered(db)
         ultima_lista = ListaCompraRepository.get_latest_created(db)
 
+        pending_deletion_requests = AccountRequestRepository.get_pending_deletion_requests(db)
+
         actividad = []
         if ultimo_usuario:
             actividad.append(
@@ -638,6 +641,19 @@ class AdminService:
             ultimo_usuario_registrado=ultimo_usuario,
             ultima_lista_creada=ultima_lista,
             actividad_reciente=actividad,
+            solicitudes_eliminacion_pendientes=[
+                {
+                    "id_solicitud": request.id_solicitud,
+                    "usuario_id": request.usuario_id,
+                    "nombre_usuario": request.usuario.nombre_usuario,
+                    "nombre_completo": request.usuario.nombre_completo,
+                    "email": request.usuario.email,
+                    "fecha_solicitud": request.fecha_solicitud,
+                    "motivo": request.motivo,
+                }
+                for request in pending_deletion_requests
+                if request.usuario is not None
+            ],
         )
 
     @staticmethod
