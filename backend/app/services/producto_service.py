@@ -83,3 +83,46 @@ class ProductoService:
         ProductoRepository.delete(db, producto)
 
         return {"message": "Producto eliminado correctamente"}
+    
+    @staticmethod
+    def search_productos(
+        db: Session,
+        nombre: str | None = None,
+        categoria: str | None = None,
+        supermercado: str | None = None,
+        marca: str | None = None,
+        orden_precio: str | None = None
+    ) -> list[Producto]:
+
+        if orden_precio and orden_precio not in ["asc", "desc"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="orden_precio debe ser 'asc' o 'desc'"
+            )
+
+        return ProductoRepository.search(
+            db,
+            nombre=nombre,
+            categoria=categoria,
+            supermercado=supermercado,
+            marca=marca,
+            orden_precio=orden_precio
+        )
+
+    @staticmethod
+    def comparar_productos(
+        db: Session,
+        nombre: str
+    ) -> list[Producto]:
+
+        if not nombre or not nombre.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El nombre del producto es obligatorio"
+            )
+
+        return ProductoRepository.search(
+            db,
+            nombre=nombre,
+            orden_precio="asc"
+        )

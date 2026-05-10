@@ -27,6 +27,31 @@ def get_all_productos(
 ):
     return ProductoService.get_all_productos(db)
 
+@router.get("/search", response_model=list[ProductoResponse])
+def search_productos(
+    nombre: str | None = None,
+    categoria: str | None = None,
+    supermercado: str | None = None,
+    marca: str | None = None,
+    orden_precio: str | None = None,
+    db: Session = Depends(get_db)
+):
+    return ProductoService.search_productos(
+        db,
+        nombre=nombre,
+        categoria=categoria,
+        supermercado=supermercado,
+        marca=marca,
+        orden_precio=orden_precio
+    )
+
+
+@router.get("/comparar", response_model=list[ProductoResponse])
+def comparar_productos(
+    nombre: str,
+    db: Session = Depends(get_db)
+):
+    return ProductoService.comparar_productos(db, nombre)
 
 @router.get("/{producto_id}", response_model=ProductoResponse)
 def get_producto_by_id(
