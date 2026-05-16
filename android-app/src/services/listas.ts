@@ -71,8 +71,34 @@ export const listasService = {
   },
 
   async getCompartidas() {
-    const { data } = await api.get<ListaCompartida[]>("/listas/compartidas");
-    return data;
+    const { data } = await api.get<any[]>("/listas/compartidas");
+
+    if (!Array.isArray(data)) {
+      return [];
+    }
+
+    // Caso 1: el backend ya devuelve ListaCompra[]
+    if (data.length > 0 && data[0].id_lista) {
+      return data as ListaCompra[];
+    }
+
+    // Caso 2: el backend devuelve ListaCompartida con la lista embebida
+    if (data.length > 0 && data[0].lista?.id_lista) {
+      return data.map((item) => item.lista) as ListaCompra[];
+    }
+
+    // Caso 3: el backend devuelve ListaCompartida con lista_id,
+    // así que pedimos el detalle de cada lista compartida
+    const listas = await Promise.all(
+      data
+        .filter((item) => item.lista_id)
+        .map(async (item) => {
+          const response = await api.get<ListaCompra>(`/listas/${item.lista_id}`);
+          return response.data;
+        })
+    );
+
+    return listas;
   },
 
   async eliminarComparticion(listaId: number, usuarioId: number) {

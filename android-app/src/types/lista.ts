@@ -42,3 +42,10 @@ export type ProductoListaUpdate = {
 export type ListaCompraDetalle = ListaCompra & {
   productos: ProductoLista[];
 };
+
+export interface ListaCompartida {
+  id_lista_compartida: number;
+  lista_id: number;
+  usuario_id: number;
+  fecha_comparticion?: string;
+}

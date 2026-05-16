@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,9 +14,9 @@ import { router } from "expo-router";
 
 import { Colors } from "@/src/constants/colors";
 import { listasService } from "@/src/services/listas";
-import { ListaCompra, ListaCompraDetalle } from "@/src/types/lista";
+import { ListaCompra } from "@/src/types/lista";
 
-type TabActiva = "propias" | "compartidas";
+type Tab = "propias" | "compartidas";
 
 function formatEuro(value?: string | number | null) {
   const numberValue = Number(value ?? 0);
@@ -39,43 +39,35 @@ function formatDate(value?: string | null) {
 
   return date.toLocaleDateString("es-ES", {
     day: "2-digit",
-    month: "short",
+    month: "long",
     year: "numeric",
   });
 }
 
 export default function ListasScreen() {
-  const [tabActiva, setTabActiva] = useState<TabActiva>("propias");
-  const [listas, setListas] = useState<ListaCompra[]>([]);
-  const [listasCompartidas, setListasCompartidas] = useState<ListaCompraDetalle[]>([]);
+  const [activeTab, setActiveTab] = useState<Tab>("propias");
+
+  const [misListas, setMisListas] = useState<ListaCompra[]>([]);
+  const [listasCompartidas, setListasCompartidas] = useState<ListaCompra[]>([]);
+
   const [nombreLista, setNombreLista] = useState("");
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [sharedWarning, setSharedWarning] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const listasMostradas = useMemo(() => {
+    return activeTab === "propias" ? misListas : listasCompartidas;
+  }, [activeTab, misListas, listasCompartidas]);
 
   const loadListas = useCallback(async () => {
     try {
-      setSharedWarning(null);
-      const data = await listasService.getMisListas();
-      setListas(data);
+      const [propias, compartidas] = await Promise.all([
+        listasService.getMisListas(),
+        listasService.getCompartidas(),
+      ]);
 
-      try {
-        const comparticiones = await listasService.getCompartidas();
-        const detallesCompartidos = await Promise.all(
-          comparticiones.map((comparticion) =>
-            listasService.getDetalle(comparticion.lista_id)
-          )
-        );
-        setListasCompartidas(detallesCompartidos);
-      } catch (sharedError: any) {
-        console.error(sharedError);
-        setListasCompartidas([]);
-        setSharedWarning(
-          sharedError?.response?.data?.detail ||
-            "No se han podido cargar las listas compartidas contigo."
-        );
-      }
+      setMisListas(propias);
+      setListasCompartidas(compartidas);
     } catch (error: any) {
       console.error(error);
       Alert.alert(
@@ -91,6 +83,11 @@ export default function ListasScreen() {
   useEffect(() => {
     loadListas();
   }, [loadListas]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadListas();
+  };
 
   const handleCreateLista = async () => {
     const nombre = nombreLista.trim();
@@ -108,9 +105,14 @@ export default function ListasScreen() {
         compartida: false,
       });
 
-      setListas((prev) => [nuevaLista, ...prev]);
       setNombreLista("");
-      setTabActiva("propias");
+      setMisListas((prev) => [nuevaLista, ...prev]);
+      setActiveTab("propias");
+
+      router.push({
+        pathname: "/listas/[id]",
+        params: { id: nuevaLista.id_lista.toString() },
+      });
     } catch (error: any) {
       console.error(error);
       Alert.alert(
@@ -122,12 +124,40 @@ export default function ListasScreen() {
     }
   };
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    loadListas();
+  const handleOpenLista = (lista: ListaCompra) => {
+    router.push({
+      pathname: "/listas/[id]",
+      params: { id: lista.id_lista.toString() },
+    });
   };
 
-  const listasMostradas = tabActiva === "propias" ? listas : listasCompartidas;
+  const renderLista = ({ item }: { item: ListaCompra }) => {
+    const isCompartida = activeTab === "compartidas";
+
+    return (
+      <TouchableOpacity style={styles.card} onPress={() => handleOpenLista(item)}>
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>{item.nombre_lista}</Text>
+
+          <Text style={styles.cardText}>
+            Total estimado: {formatEuro(item.total_estimado)}
+          </Text>
+
+          <Text style={styles.cardText}>
+            Última modificación: {formatDate(item.fecha_modificacion)}
+          </Text>
+
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {isCompartida ? "Compartida contigo" : item.compartida ? "Compartida" : "Privada"}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.arrow}>›</Text>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -140,137 +170,108 @@ export default function ListasScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.title}>Listas</Text>
-          <Text style={styles.subtitle}>Gestiona tus compras y productos.</Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.catalogButton}
-          onPress={() => router.push("/productos")}
-        >
-          <Text style={styles.catalogButtonText}>Catálogo</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.createBox}>
-        <Text style={styles.createTitle}>Nueva lista</Text>
-        <TextInput
-          value={nombreLista}
-          onChangeText={setNombreLista}
-          placeholder="Ej: Compra semanal"
-          placeholderTextColor={Colors.textMuted}
-          style={styles.input}
-          returnKeyType="done"
-          onSubmitEditing={handleCreateLista}
-        />
-
-        <TouchableOpacity
-          style={[styles.createButton, creating && styles.disabledButton]}
-          onPress={handleCreateLista}
-          disabled={creating}
-        >
-          <Text style={styles.createButtonText}>
-            {creating ? "Creando..." : "Crear lista"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, tabActiva === "propias" && styles.tabActive]}
-          onPress={() => setTabActiva("propias")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              tabActiva === "propias" && styles.tabTextActive,
-            ]}
-          >
-            Mis listas ({listas.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, tabActiva === "compartidas" && styles.tabActive]}
-          onPress={() => setTabActiva("compartidas")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              tabActiva === "compartidas" && styles.tabTextActive,
-            ]}
-          >
-            Compartidas ({listasCompartidas.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {sharedWarning && tabActiva === "compartidas" ? (
-        <View style={styles.warningBox}>
-          <Text style={styles.warningText}>{sharedWarning}</Text>
-        </View>
-      ) : null}
-
       <FlatList
         data={listasMostradas}
         keyExtractor={(item) => item.id_lista.toString()}
+        renderItem={renderLista}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-        contentContainerStyle={
-          listasMostradas.length === 0 ? styles.emptyListContent : undefined
+        ListHeaderComponent={
+          <View>
+            <View style={styles.header}>
+              <View>
+                <Text style={styles.title}>Listas</Text>
+                <Text style={styles.subtitle}>
+                  Gestiona tus listas de la compra y las que han compartido contigo.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.catalogButton}
+                onPress={() => router.push("/productos")}
+              >
+                <Text style={styles.catalogButtonText}>Catálogo</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.tabs}>
+              <TouchableOpacity
+                style={[styles.tabButton, activeTab === "propias" && styles.activeTabButton]}
+                onPress={() => setActiveTab("propias")}
+              >
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    activeTab === "propias" && styles.activeTabButtonText,
+                  ]}
+                >
+                  Mis listas
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.tabButton,
+                  activeTab === "compartidas" && styles.activeTabButton,
+                ]}
+                onPress={() => setActiveTab("compartidas")}
+              >
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    activeTab === "compartidas" && styles.activeTabButtonText,
+                  ]}
+                >
+                  Compartidas conmigo
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeTab === "propias" ? (
+              <View style={styles.createCard}>
+                <TextInput
+                  value={nombreLista}
+                  onChangeText={setNombreLista}
+                  placeholder="Nombre de la lista"
+                  placeholderTextColor={Colors.textMuted}
+                  style={styles.input}
+                  editable={!creating}
+                />
+
+                <TouchableOpacity
+                  style={[styles.createButton, creating && styles.disabledButton]}
+                  onPress={handleCreateLista}
+                  disabled={creating}
+                >
+                  <Text style={styles.createButtonText}>
+                    {creating ? "Creando..." : "Crear lista"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            <Text style={styles.sectionTitle}>
+              {activeTab === "propias" ? "Mis listas" : "Listas compartidas conmigo"}
+            </Text>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <Text style={styles.emptyTitle}>
-              {tabActiva === "propias"
+              {activeTab === "propias"
                 ? "Todavía no tienes listas."
-                : "No tienes listas compartidas contigo."}
+                : "No tienes listas compartidas."}
             </Text>
+
             <Text style={styles.emptyText}>
-              {tabActiva === "propias"
+              {activeTab === "propias"
                 ? "Crea una lista para empezar a añadir productos."
-                : "Cuando alguien comparta una lista contigo aparecerá aquí."}
+                : "Cuando otro usuario comparta una lista contigo, aparecerá aquí."}
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            activeOpacity={0.82}
-            onPress={() =>
-              router.push({
-                pathname: "/listas/[id]",
-                params: { id: item.id_lista.toString() },
-              })
-            }
-          >
-            <View style={styles.cardContent}>
-              <View style={styles.cardTopRow}>
-                <Text style={styles.cardTitle}>{item.nombre_lista}</Text>
-                <Text style={styles.arrow}>›</Text>
-              </View>
-
-              <Text style={styles.cardSubtitle}>
-                Total estimado: {formatEuro(item.total_estimado)}
-              </Text>
-
-              <View style={styles.badgeRow}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {tabActiva === "compartidas" ? "Compartida contigo" : "Propia"}
-                  </Text>
-                </View>
-
-                <Text style={styles.dateText}>
-                  Modificada: {formatDate(item.fecha_modificacion)}
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
+        contentContainerStyle={styles.listContent}
       />
     </View>
   );
@@ -282,33 +283,38 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: Colors.background,
   },
+  listContent: {
+    paddingBottom: 30,
+  },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Colors.background,
+    padding: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
     color: Colors.textMuted,
   },
-  headerRow: {
+  header: {
     flexDirection: "row",
-    alignItems: "flex-start",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 12,
     marginBottom: 18,
   },
   title: {
     fontSize: 30,
-    fontWeight: "800",
+    fontWeight: "900",
     color: Colors.title,
   },
   subtitle: {
     marginTop: 4,
-    color: Colors.textMuted,
     fontSize: 14,
+    color: Colors.textMuted,
+    lineHeight: 20,
   },
   catalogButton: {
     backgroundColor: Colors.black,
@@ -318,84 +324,72 @@ const styles = StyleSheet.create({
   },
   catalogButtonText: {
     color: Colors.white,
-    fontWeight: "800",
+    fontWeight: "900",
   },
-  createBox: {
-    backgroundColor: Colors.surface,
-    borderRadius: 18,
-    padding: 14,
+  tabs: {
+    flexDirection: "row",
+    backgroundColor: Colors.card,
+    padding: 4,
+    borderRadius: 16,
     marginBottom: 16,
-    gap: 10,
+    gap: 4,
+  },
+  tabButton: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+  },
+  activeTabButton: {
+    backgroundColor: Colors.primary,
+  },
+  tabButtonText: {
+    color: Colors.textMuted,
+    fontWeight: "900",
+    fontSize: 13,
+    textAlign: "center",
+  },
+  activeTabButtonText: {
+    color: Colors.white,
+  },
+  createCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  createTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Colors.title,
+    marginBottom: 18,
+    gap: 12,
   },
   input: {
+    minHeight: 46,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 12,
     fontSize: 16,
     backgroundColor: Colors.white,
     color: Colors.text,
   },
   createButton: {
+    minHeight: 46,
     backgroundColor: Colors.primary,
-    paddingVertical: 13,
     borderRadius: 14,
     alignItems: "center",
-  },
-  disabledButton: {
-    opacity: 0.6,
+    justifyContent: "center",
   },
   createButtonText: {
     color: Colors.white,
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "900",
   },
-  tabs: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
-  },
-  tab: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 22,
-    backgroundColor: Colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabActive: {
-    backgroundColor: Colors.black,
-    borderColor: Colors.black,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Colors.text,
-  },
-  tabTextActive: {
-    color: Colors.white,
-  },
-  warningBox: {
-    backgroundColor: "#FFF7ED",
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-    borderRadius: 14,
-    padding: 12,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Colors.title,
     marginBottom: 12,
-  },
-  warningText: {
-    color: "#9A3412",
-    lineHeight: 20,
   },
   card: {
     backgroundColor: Colors.surface,
@@ -404,73 +398,63 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  cardContent: {
-    gap: 8,
-  },
-  cardTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+  },
+  cardContent: {
+    flex: 1,
   },
   cardTitle: {
-    flex: 1,
     fontSize: 18,
+    fontWeight: "900",
+    color: Colors.title,
+    marginBottom: 6,
+  },
+  cardText: {
+    fontSize: 14,
+    color: Colors.textMuted,
+    marginBottom: 3,
+  },
+  badge: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    backgroundColor: Colors.backgroundAlt,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  badgeText: {
+    fontSize: 12,
     fontWeight: "800",
     color: Colors.title,
   },
-  cardSubtitle: {
-    fontSize: 15,
-    color: Colors.textMuted,
-    fontWeight: "600",
-  },
   arrow: {
-    fontSize: 30,
+    fontSize: 32,
     color: Colors.textMuted,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    marginTop: 4,
-  },
-  badge: {
-    backgroundColor: Colors.backgroundAlt,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  badgeText: {
-    color: Colors.primary,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  dateText: {
-    flex: 1,
-    textAlign: "right",
-    color: Colors.textMuted,
-    fontSize: 12,
-  },
-  emptyListContent: {
-    flexGrow: 1,
+    marginLeft: 12,
   },
   emptyBox: {
-    flex: 1,
-    paddingTop: 60,
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: "center",
   },
   emptyTitle: {
     color: Colors.title,
+    fontWeight: "900",
     fontSize: 17,
-    fontWeight: "800",
     marginBottom: 6,
+    textAlign: "center",
   },
   emptyText: {
     color: Colors.textMuted,
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });
