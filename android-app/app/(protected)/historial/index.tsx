@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,25 +9,44 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
+import { Colors } from "@/src/constants/colors";
 import { historialService } from "@/src/services/historial";
 import { HistorialLista } from "@/src/types/historial";
 
-function formatDate(value: string) {
+function formatEuro(value?: string | number | null) {
+  const numberValue = Number(value ?? 0);
+
+  if (Number.isNaN(numberValue)) {
+    return "0,00 €";
+  }
+
+  return `${numberValue.toFixed(2).replace(".", ",")} €`;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "Sin fecha";
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return "Sin fecha";
   }
 
   return date.toLocaleDateString("es-ES", {
     day: "2-digit",
-    month: "2-digit",
+    month: "long",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatEstado(value?: string | null) {
+  if (!value) return "Finalizada";
+
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export default function HistorialScreen() {
@@ -39,28 +58,40 @@ export default function HistorialScreen() {
     try {
       const data = await historialService.getMiHistorial();
       setHistorial(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      Alert.alert("Error", "No se ha podido cargar el historial.");
+      Alert.alert(
+        "Error",
+        error?.response?.data?.detail || "No se ha podido cargar el historial."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadHistorial();
-  }, [loadHistorial]);
+  useFocusEffect(
+    useCallback(() => {
+      loadHistorial();
+    }, [loadHistorial])
+  );
 
   const handleRefresh = () => {
     setRefreshing(true);
     loadHistorial();
   };
 
+  const handleOpenHistorial = (item: HistorialLista) => {
+    router.push({
+      pathname: "/historial/[id]",
+      params: { id: item.id_historial.toString() },
+    });
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={Colors.primary} />
         <Text style={styles.loadingText}>Cargando historial...</Text>
       </View>
     );
@@ -68,23 +99,33 @@ export default function HistorialScreen() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.title}>Historial</Text>
-      <Text style={styles.subtitle}>
-        Aquí aparecen las listas que ya has finalizado.
-      </Text>
-
       <FlatList
         data={historial}
         keyExtractor={(item) => item.id_historial.toString()}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-        contentContainerStyle={
-          historial.length === 0 ? styles.emptyListContent : undefined
+        contentContainerStyle={[
+          styles.listContent,
+          historial.length === 0 && styles.emptyListContent,
+        ]}
+        ListHeaderComponent={
+          <View>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.replace("/listas")}
+            >
+              <Text style={styles.backButtonText}>← Volver a listas</Text>
+            </TouchableOpacity>
+
+            <View style={styles.headerCard}>
+              <Text style={styles.title}>Historial de listas</Text>
+              <Text style={styles.subtitle}>
+                Consulta las listas que ya has finalizado y repítelas cuando
+                quieras volver a comprar lo mismo.
+              </Text>
+            </View>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
@@ -92,34 +133,46 @@ export default function HistorialScreen() {
             <Text style={styles.emptyText}>
               Cuando finalices una lista de la compra, aparecerá aquí.
             </Text>
+
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => router.replace("/listas")}
+            >
+              <Text style={styles.emptyButtonText}>Ir a mis listas</Text>
+            </TouchableOpacity>
           </View>
         }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: "/historial/[id]",
-                params: { id: item.id_historial.toString() },
-              })
-            }
+            onPress={() => handleOpenHistorial(item)}
           >
             <View style={styles.cardContent}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{item.nombre_lista ?? "Lista finalizada"}</Text>
+                <View style={styles.cardTitleBox}>
+                  <Text style={styles.cardTitle}>
+                    {item.nombre_lista ?? "Lista finalizada"}
+                  </Text>
+
+                  <Text style={styles.cardDate}>{formatDate(item.fecha)}</Text>
+                </View>
+
                 <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>{item.estado}</Text>
+                  <Text style={styles.statusText}>
+                    {formatEstado(item.estado)}
+                  </Text>
                 </View>
               </View>
 
-              <Text style={styles.cardDate}>{formatDate(item.fecha)}</Text>
-
               <View style={styles.cardFooter}>
-                <Text style={styles.cardMeta}>
-                  {item.num_productos} producto{item.num_productos === 1 ? "" : "s"}
-                </Text>
+                <View style={styles.metaPill}>
+                  <Text style={styles.metaPillText}>
+                    {item.num_productos} producto
+                    {item.num_productos === 1 ? "" : "s"}
+                  </Text>
+                </View>
 
-                <Text style={styles.total}>{item.total_gastado} €</Text>
+                <Text style={styles.total}>{formatEuro(item.total_gastado)}</Text>
               </View>
             </View>
 
@@ -135,43 +188,62 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#F8F8F8",
+    backgroundColor: Colors.background,
+  },
+  listContent: {
+    paddingBottom: 30,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F8F8F8",
+    backgroundColor: Colors.background,
+    padding: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
+    color: Colors.textMuted,
   },
   backButton: {
     marginBottom: 16,
   },
   backButtonText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "800",
+    color: Colors.title,
+  },
+  headerCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 18,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 30,
+    fontWeight: "900",
+    color: Colors.title,
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 15,
-    color: "#666",
-    marginBottom: 20,
+    color: Colors.textMuted,
+    lineHeight: 21,
   },
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
   },
   cardContent: {
     flex: 1,
@@ -179,32 +251,35 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
-    marginBottom: 6,
+    marginBottom: 14,
+  },
+  cardTitleBox: {
+    flex: 1,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
+    fontWeight: "900",
+    color: Colors.title,
+    marginBottom: 4,
+  },
+  cardDate: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
   },
   statusBadge: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: "#ECFDF5",
     borderRadius: 999,
-    paddingVertical: 4,
+    paddingVertical: 5,
     paddingHorizontal: 10,
   },
   statusText: {
     color: "#166534",
     fontSize: 12,
-    fontWeight: "700",
-    textTransform: "capitalize",
-  },
-  cardDate: {
-    color: "#666",
-    fontSize: 14,
-    marginBottom: 10,
+    fontWeight: "900",
   },
   cardFooter: {
     flexDirection: "row",
@@ -212,38 +287,58 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  cardMeta: {
-    color: "#666",
-    fontSize: 14,
+  metaPill: {
+    backgroundColor: Colors.backgroundAlt,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  metaPillText: {
+    color: Colors.title,
+    fontWeight: "800",
+    fontSize: 12,
   },
   total: {
     fontSize: 18,
-    fontWeight: "800",
-    color: "#111827",
+    fontWeight: "900",
+    color: Colors.title,
   },
   arrow: {
     fontSize: 32,
-    color: "#999",
-  },
-  emptyListContent: {
-    flexGrow: 1,
+    color: Colors.textMuted,
   },
   emptyBox: {
     flex: 1,
-    justifyContent: "center",
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: "center",
-    paddingHorizontal: 20,
+    justifyContent: "center",
   },
   emptyTitle: {
+    color: Colors.title,
+    fontWeight: "900",
     fontSize: 18,
-    fontWeight: "700",
     marginBottom: 8,
-    color: "#111827",
+    textAlign: "center",
   },
   emptyText: {
-    color: "#777",
-    fontSize: 16,
+    color: Colors.textMuted,
+    fontSize: 15,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 21,
+    marginBottom: 18,
+  },
+  emptyButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+  },
+  emptyButtonText: {
+    color: Colors.white,
+    fontWeight: "900",
   },
 });
