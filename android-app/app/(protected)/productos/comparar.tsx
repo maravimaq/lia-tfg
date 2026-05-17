@@ -185,9 +185,7 @@ export default function CompararProductosScreen() {
 
               <Text style={styles.title}>Comparación de precios</Text>
 
-              <View style={styles.menuPlaceholder}>
-                <Text style={styles.menuPlaceholderText}>☰</Text>
-              </View>
+              <View style={styles.headerSpacer} />
             </View>
 
             <View style={styles.searchBox}>
@@ -291,16 +289,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Colors.title,
   },
-  menuPlaceholder: {
+  headerSpacer: {
     width: 42,
     height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuPlaceholderText: {
-    fontSize: 28,
-    color: Colors.title,
-    fontWeight: "900",
   },
   searchBox: {
     alignSelf: "center",
