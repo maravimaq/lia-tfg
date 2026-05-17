@@ -94,7 +94,7 @@ export default function CompararProductosScreen() {
       Alert.alert(
         "Error",
         error?.response?.data?.detail ||
-          "No se han podido comparar los productos."
+        "No se han podido comparar los productos."
       );
     } finally {
       setLoading(false);
@@ -169,7 +169,7 @@ export default function CompararProductosScreen() {
     <View style={styles.container}>
       <FlatList
         data={productosAgrupados}
-        keyExtractor={(item) => item.nombre}
+        keyExtractor={(item, index) => `${item.nombre}-${index}`}
         renderItem={renderProductoComparado}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
@@ -179,8 +179,7 @@ export default function CompararProductosScreen() {
             <View style={styles.topBar}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => router.back()}
-              >
+                onPress={() => router.replace("/productos")}              >
                 <Text style={styles.backButtonText}>‹</Text>
               </TouchableOpacity>
 
