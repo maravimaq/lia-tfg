@@ -8,6 +8,7 @@ import {
   ProductoLista,
   ProductoListaCreate,
   ProductoListaUpdate,
+  TipoCompartido,
 } from "@/src/types/lista";
 
 export const listasService = {
@@ -63,10 +64,19 @@ export const listasService = {
     return data;
   },
 
-  async compartir(listaId: number, emailUsuario: string) {
-    const { data } = await api.post<ListaCompartida>(`/listas/${listaId}/compartir`, {
-      email_usuario: emailUsuario,
-    });
+  async compartir(
+    listaId: number,
+    emailUsuario: string,
+    tipoCompartido: TipoCompartido = "edicion"
+  ) {
+    const { data } = await api.post<ListaCompartida>(
+      `/listas/${listaId}/compartir`,
+      {
+        email_usuario: emailUsuario,
+        tipo_compartido: tipoCompartido,
+      }
+    );
+
     return data;
   },
 
@@ -82,23 +92,37 @@ export const listasService = {
       return data as ListaCompra[];
     }
 
-    // Caso 2: el backend devuelve ListaCompartida con la lista embebida
+    // Caso 2: backend nuevo: devuelve ListaCompartida con la lista embebida
     if (data.length > 0 && data[0].lista?.id_lista) {
-      return data.map((item) => item.lista) as ListaCompra[];
+      return data.map((item) => ({
+        ...item.lista,
+        tipo_compartido: item.tipo_compartido,
+      })) as ListaCompra[];
     }
 
-    // Caso 3: el backend devuelve ListaCompartida con lista_id,
-    // así que pedimos el detalle de cada lista compartida
+    // Caso 3: backend antiguo: devuelve ListaCompartida con lista_id
     const listas = await Promise.all(
       data
         .filter((item) => item.lista_id)
         .map(async (item) => {
           const response = await api.get<ListaCompra>(`/listas/${item.lista_id}`);
-          return response.data;
+
+          return {
+            ...response.data,
+            tipo_compartido: item.tipo_compartido ?? response.data.tipo_compartido,
+          };
         })
     );
 
     return listas;
+  },
+
+  async salirDeCompartidos(listaId: number) {
+    const { data } = await api.delete<{ message: string }>(
+      `/listas/compartidas/${listaId}`
+    );
+
+    return data;
   },
 
   async eliminarComparticion(listaId: number, usuarioId: number) {

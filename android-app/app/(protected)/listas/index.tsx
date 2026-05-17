@@ -44,6 +44,22 @@ function formatDate(value?: string | null) {
   });
 }
 
+function getSharedBadgeText(lista: ListaCompra, isCompartida: boolean) {
+  if (!isCompartida) {
+    return lista.compartida ? "Compartida" : "Privada";
+  }
+
+  if (lista.tipo_compartido === "visualizacion") {
+    return "Solo visualización";
+  }
+
+  if (lista.tipo_compartido === "edicion") {
+    return "Con privilegios";
+  }
+
+  return "Compartida contigo";
+}
+
 export default function ListasScreen() {
   const [activeTab, setActiveTab] = useState<Tab>("propias");
 
@@ -147,9 +163,29 @@ export default function ListasScreen() {
             Última modificación: {formatDate(item.fecha_modificacion)}
           </Text>
 
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>
-              {isCompartida ? "Compartida contigo" : item.compartida ? "Compartida" : "Privada"}
+          <View
+            style={[
+              styles.badge,
+              isCompartida &&
+                item.tipo_compartido === "visualizacion" &&
+                styles.readOnlyBadge,
+              isCompartida &&
+                item.tipo_compartido === "edicion" &&
+                styles.editBadge,
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgeText,
+                isCompartida &&
+                  item.tipo_compartido === "visualizacion" &&
+                  styles.readOnlyBadgeText,
+                isCompartida &&
+                  item.tipo_compartido === "edicion" &&
+                  styles.editBadgeText,
+              ]}
+            >
+              {getSharedBadgeText(item, isCompartida)}
             </Text>
           </View>
         </View>
@@ -427,6 +463,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: Colors.title,
+  },
+  editBadge: {
+    backgroundColor: "#ECFDF5",
+  },
+  editBadgeText: {
+    color: "#166534",
+  },
+  readOnlyBadge: {
+    backgroundColor: "#FEF3C7",
+  },
+  readOnlyBadgeText: {
+    color: "#92400E",
   },
   arrow: {
     fontSize: 32,

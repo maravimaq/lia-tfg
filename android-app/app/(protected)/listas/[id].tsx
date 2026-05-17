@@ -12,11 +12,16 @@ import {
   View,
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+
 import { Colors } from "@/src/constants/colors";
 import { useAuth } from "@/src/hooks/useAuth";
-import { listasService } from "@/src/services/listas";
 import { historialService } from "@/src/services/historial";
-import { ListaCompraDetalle, ProductoLista } from "@/src/types/lista";
+import { listasService } from "@/src/services/listas";
+import {
+  ListaCompraDetalle,
+  ProductoLista,
+  TipoCompartido,
+} from "@/src/types/lista";
 
 function formatEuro(value?: string | number | null) {
   const numberValue = Number(value ?? 0);
@@ -53,9 +58,13 @@ export default function DetalleListaScreen() {
   const [lista, setLista] = useState<ListaCompraDetalle | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [productoAEliminar, setProductoAEliminar] = useState<ProductoLista | null>(null);
+
+  const [productoAEliminar, setProductoAEliminar] =
+    useState<ProductoLista | null>(null);
   const [deletingProduct, setDeletingProduct] = useState(false);
-  const [updatingProductId, setUpdatingProductId] = useState<number | null>(null);
+  const [updatingProductId, setUpdatingProductId] = useState<number | null>(
+    null
+  );
 
   const [editingName, setEditingName] = useState(false);
   const [nombreEditado, setNombreEditado] = useState("");
@@ -66,14 +75,44 @@ export default function DetalleListaScreen() {
 
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
+  const [shareTipoCompartido, setShareTipoCompartido] =
+    useState<TipoCompartido>("edicion");
   const [sharing, setSharing] = useState(false);
+
   const [finishListModalVisible, setFinishListModalVisible] = useState(false);
   const [finishingList, setFinishingList] = useState(false);
+
+  const [exitSharedModalVisible, setExitSharedModalVisible] = useState(false);
+  const [exitingSharedList, setExitingSharedList] = useState(false);
 
   const isOwner = useMemo(() => {
     if (!lista || !user) return false;
     return lista.usuario_id === user.id_usuario;
   }, [lista, user]);
+
+  const canModifyProducts = useMemo(() => {
+    if (!lista) return false;
+
+    return isOwner || lista.tipo_compartido === "edicion";
+  }, [isOwner, lista]);
+
+  const accessLabel = useMemo(() => {
+    if (!lista) return "";
+
+    if (isOwner) {
+      return "Lista propia";
+    }
+
+    if (lista.tipo_compartido === "edicion") {
+      return "Lista compartida contigo · con privilegios";
+    }
+
+    if (lista.tipo_compartido === "visualizacion") {
+      return "Lista compartida contigo · solo visualización";
+    }
+
+    return "Lista compartida contigo";
+  }, [isOwner, lista]);
 
   const loadDetalle = useCallback(async () => {
     if (!listaId || Number.isNaN(listaId)) {
@@ -126,6 +165,7 @@ export default function DetalleListaScreen() {
 
     try {
       setSavingName(true);
+
       const listaActualizada = await listasService.update(lista.id_lista, {
         nombre_lista: nombre,
       });
@@ -140,6 +180,7 @@ export default function DetalleListaScreen() {
           }
           : prev
       );
+
       setEditingName(false);
     } catch (error: any) {
       console.error(error);
@@ -158,6 +199,14 @@ export default function DetalleListaScreen() {
   };
 
   const handleDeleteProducto = (productoLista: ProductoLista) => {
+    if (!canModifyProducts) {
+      Alert.alert(
+        "Solo visualización",
+        "No tienes permisos para modificar productos en esta lista."
+      );
+      return;
+    }
+
     setProductoAEliminar(productoLista);
   };
 
@@ -190,8 +239,17 @@ export default function DetalleListaScreen() {
   };
 
   const handleIncreaseQuantity = async (productoLista: ProductoLista) => {
+    if (!canModifyProducts) {
+      Alert.alert(
+        "Solo visualización",
+        "No tienes permisos para modificar productos en esta lista."
+      );
+      return;
+    }
+
     try {
       setUpdatingProductId(productoLista.id_producto_lista);
+
       await listasService.updateProducto(productoLista.id_producto_lista, {
         cantidad: productoLista.cantidad + 1,
       });
@@ -201,7 +259,8 @@ export default function DetalleListaScreen() {
       console.error(error);
       Alert.alert(
         "Error",
-        error?.response?.data?.detail || "No se ha podido actualizar la cantidad."
+        error?.response?.data?.detail ||
+        "No se ha podido actualizar la cantidad."
       );
     } finally {
       setUpdatingProductId(null);
@@ -209,6 +268,14 @@ export default function DetalleListaScreen() {
   };
 
   const handleDecreaseQuantity = async (productoLista: ProductoLista) => {
+    if (!canModifyProducts) {
+      Alert.alert(
+        "Solo visualización",
+        "No tienes permisos para modificar productos en esta lista."
+      );
+      return;
+    }
+
     if (productoLista.cantidad <= 1) {
       handleDeleteProducto(productoLista);
       return;
@@ -216,6 +283,7 @@ export default function DetalleListaScreen() {
 
     try {
       setUpdatingProductId(productoLista.id_producto_lista);
+
       await listasService.updateProducto(productoLista.id_producto_lista, {
         cantidad: productoLista.cantidad - 1,
       });
@@ -225,7 +293,8 @@ export default function DetalleListaScreen() {
       console.error(error);
       Alert.alert(
         "Error",
-        error?.response?.data?.detail || "No se ha podido actualizar la cantidad."
+        error?.response?.data?.detail ||
+        "No se ha podido actualizar la cantidad."
       );
     } finally {
       setUpdatingProductId(null);
@@ -235,7 +304,7 @@ export default function DetalleListaScreen() {
   const handleShareList = async () => {
     if (!lista) return;
 
-    const email = shareEmail.trim().toLowerCase();
+    const email = shareEmail.trim();
 
     if (!email) {
       Alert.alert("Campo obligatorio", "Introduce el email del usuario.");
@@ -244,11 +313,24 @@ export default function DetalleListaScreen() {
 
     try {
       setSharing(true);
-      await listasService.compartir(lista.id_lista, email);
+
+      await listasService.compartir(
+        lista.id_lista,
+        email,
+        shareTipoCompartido
+      );
+
       setShareEmail("");
+      setShareTipoCompartido("edicion");
       setShareModalVisible(false);
       setLista((prev) => (prev ? { ...prev, compartida: true } : prev));
-      Alert.alert("Lista compartida", "El usuario ya puede acceder a esta lista.");
+
+      Alert.alert(
+        "Lista compartida",
+        shareTipoCompartido === "edicion"
+          ? "El usuario ya puede acceder y modificar productos de esta lista."
+          : "El usuario ya puede ver esta lista, pero no modificarla."
+      );
     } catch (error: any) {
       console.error(error);
       Alert.alert(
@@ -265,7 +347,9 @@ export default function DetalleListaScreen() {
 
     try {
       setDeletingList(true);
+
       await listasService.delete(lista.id_lista);
+
       setDeleteListModalVisible(false);
       router.replace("/listas");
     } catch (error: any) {
@@ -310,6 +394,29 @@ export default function DetalleListaScreen() {
     }
   };
 
+  const confirmarSalirDeCompartidos = async () => {
+    if (!lista) return;
+
+    try {
+      setExitingSharedList(true);
+
+      await listasService.salirDeCompartidos(lista.id_lista);
+
+      setExitSharedModalVisible(false);
+
+      router.replace("/listas");
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert(
+        "Error",
+        error?.response?.data?.detail ||
+        "No se ha podido eliminar la lista de tus compartidos."
+      );
+    } finally {
+      setExitingSharedList(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -323,7 +430,11 @@ export default function DetalleListaScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.emptyTitle}>No se ha encontrado la lista.</Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace("/listas")}>
+
+        <TouchableOpacity
+          style={[styles.primaryButton, styles.centerButton]}
+          onPress={() => router.replace("/listas")}
+        >
           <Text style={styles.primaryButtonText}>Volver</Text>
         </TouchableOpacity>
       </View>
@@ -340,7 +451,10 @@ export default function DetalleListaScreen() {
         }
         ListHeaderComponent={
           <View>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.replace("/listas")}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.replace("/listas")}
+            >
               <Text style={styles.backButtonText}>← Volver</Text>
             </TouchableOpacity>
 
@@ -364,11 +478,16 @@ export default function DetalleListaScreen() {
                       onPress={handleCancelEditName}
                       disabled={savingName}
                     >
-                      <Text style={styles.secondarySmallButtonText}>Cancelar</Text>
+                      <Text style={styles.secondarySmallButtonText}>
+                        Cancelar
+                      </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={[styles.primarySmallButton, savingName && styles.disabledButton]}
+                      style={[
+                        styles.primarySmallButton,
+                        savingName && styles.disabledButton,
+                      ]}
                       onPress={handleSaveName}
                       disabled={savingName}
                     >
@@ -382,9 +501,7 @@ export default function DetalleListaScreen() {
                 <View style={styles.titleRow}>
                   <View style={styles.titleBox}>
                     <Text style={styles.title}>{lista.nombre_lista}</Text>
-                    <Text style={styles.ownerText}>
-                      {isOwner ? "Lista propia" : "Lista compartida contigo"}
-                    </Text>
+                    <Text style={styles.ownerText}>{accessLabel}</Text>
                   </View>
 
                   {isOwner ? (
@@ -401,12 +518,16 @@ export default function DetalleListaScreen() {
               <View style={styles.summaryRow}>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryLabel}>Total estimado</Text>
-                  <Text style={styles.summaryValue}>{formatEuro(lista.total_estimado)}</Text>
+                  <Text style={styles.summaryValue}>
+                    {formatEuro(lista.total_estimado)}
+                  </Text>
                 </View>
 
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryLabel}>Productos</Text>
-                  <Text style={styles.summaryValue}>{lista.productos.length}</Text>
+                  <Text style={styles.summaryValue}>
+                    {lista.productos.length}
+                  </Text>
                 </View>
               </View>
 
@@ -415,33 +536,46 @@ export default function DetalleListaScreen() {
               </Text>
             </View>
 
-            <View style={styles.actionGrid}>
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() =>
-                  router.push({
-                    pathname: "/productos",
-                    params: { listaId: lista.id_lista.toString() },
-                  })
-                }
-              >
-                <Text style={styles.primaryButtonText}>Añadir producto</Text>
-              </TouchableOpacity>
-
-              {isOwner ? (
+            {canModifyProducts ? (
+              <View style={styles.actionGrid}>
                 <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => setShareModalVisible(true)}
+                  style={styles.primaryButton}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/productos",
+                      params: { listaId: lista.id_lista.toString() },
+                    })
+                  }
                 >
-                  <Text style={styles.secondaryButtonText}>Compartir</Text>
+                  <Text style={styles.primaryButtonText}>Añadir producto</Text>
                 </TouchableOpacity>
-              ) : null}
-            </View>
+
+                {isOwner ? (
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => setShareModalVisible(true)}
+                  >
+                    <Text style={styles.secondaryButtonText}>Compartir</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.readOnlyBox}>
+                <Text style={styles.readOnlyTitle}>Solo visualización</Text>
+                <Text style={styles.readOnlyText}>
+                  Puedes consultar esta lista, pero no añadir, eliminar ni
+                  modificar productos.
+                </Text>
+              </View>
+            )}
 
             {isOwner ? (
               <View style={styles.ownerActions}>
                 <TouchableOpacity
-                  style={[styles.finishButton, finishingList && styles.disabledButton]}
+                  style={[
+                    styles.finishButton,
+                    finishingList && styles.disabledButton,
+                  ]}
                   onPress={() => setFinishListModalVisible(true)}
                   disabled={finishingList}
                 >
@@ -452,9 +586,23 @@ export default function DetalleListaScreen() {
                   style={styles.dangerOutlineButton}
                   onPress={() => setDeleteListModalVisible(true)}
                 >
-                  <Text style={styles.dangerOutlineButtonText}>Eliminar lista</Text>
+                  <Text style={styles.dangerOutlineButtonText}>
+                    Eliminar lista
+                  </Text>
                 </TouchableOpacity>
               </View>
+            ) : null}
+
+            {!isOwner ? (
+              <TouchableOpacity
+                style={styles.dangerOutlineButton}
+                onPress={() => setExitSharedModalVisible(true)}
+                disabled={exitingSharedList}
+              >
+                <Text style={styles.dangerOutlineButtonText}>
+                  Quitar de mis compartidos
+                </Text>
+              </TouchableOpacity>
             ) : null}
 
             <Text style={styles.sectionTitle}>Productos de la lista</Text>
@@ -462,9 +610,13 @@ export default function DetalleListaScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyTitle}>Esta lista todavía no tiene productos.</Text>
+            <Text style={styles.emptyTitle}>
+              Esta lista todavía no tiene productos.
+            </Text>
             <Text style={styles.emptyText}>
-              Pulsa en “Añadir producto” para buscar en el catálogo.
+              {canModifyProducts
+                ? "Pulsa en “Añadir producto” para buscar en el catálogo."
+                : "El propietario todavía no ha añadido productos a esta lista."}
             </Text>
           </View>
         }
@@ -477,7 +629,8 @@ export default function DetalleListaScreen() {
                 <Text style={styles.productName}>{item.producto.nombre}</Text>
 
                 <Text style={styles.productMeta}>
-                  {item.producto.marca ?? "Sin marca"} · {item.producto.supermercado}
+                  {item.producto.marca ?? "Sin marca"} ·{" "}
+                  {item.producto.supermercado}
                 </Text>
 
                 <Text style={styles.productMeta}>
@@ -489,33 +642,47 @@ export default function DetalleListaScreen() {
                 </Text>
               </View>
 
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={[styles.quantityButton, isUpdating && styles.disabledButton]}
-                  onPress={() => handleDecreaseQuantity(item)}
-                  disabled={isUpdating}
-                >
-                  <Text style={styles.quantityButtonText}>-</Text>
-                </TouchableOpacity>
+              {canModifyProducts ? (
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.quantityButton,
+                      isUpdating && styles.disabledButton,
+                    ]}
+                    onPress={() => handleDecreaseQuantity(item)}
+                    disabled={isUpdating}
+                  >
+                    <Text style={styles.quantityButtonText}>-</Text>
+                  </TouchableOpacity>
 
-                <Text style={styles.quantity}>{item.cantidad}</Text>
+                  <Text style={styles.quantity}>{item.cantidad}</Text>
 
-                <TouchableOpacity
-                  style={[styles.quantityButton, isUpdating && styles.disabledButton]}
-                  onPress={() => handleIncreaseQuantity(item)}
-                  disabled={isUpdating}
-                >
-                  <Text style={styles.quantityButtonText}>+</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.quantityButton,
+                      isUpdating && styles.disabledButton,
+                    ]}
+                    onPress={() => handleIncreaseQuantity(item)}
+                    disabled={isUpdating}
+                  >
+                    <Text style={styles.quantityButtonText}>+</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDeleteProducto(item)}
-                  disabled={isUpdating}
-                >
-                  <Text style={styles.deleteButtonText}>Eliminar</Text>
-                </TouchableOpacity>
-              </View>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteProducto(item)}
+                    disabled={isUpdating}
+                  >
+                    <Text style={styles.deleteButtonText}>Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.readOnlyQuantityRow}>
+                  <Text style={styles.readOnlyQuantityText}>
+                    Cantidad: {item.cantidad}
+                  </Text>
+                </View>
+              )}
             </View>
           );
         }}
@@ -533,7 +700,9 @@ export default function DetalleListaScreen() {
 
             <Text style={styles.modalText}>
               ¿Quieres eliminar{" "}
-              <Text style={styles.modalStrong}>{productoAEliminar?.producto.nombre}</Text>{" "}
+              <Text style={styles.modalStrong}>
+                {productoAEliminar?.producto.nombre}
+              </Text>{" "}
               de la lista?
             </Text>
 
@@ -547,7 +716,10 @@ export default function DetalleListaScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalDeleteButton, deletingProduct && styles.disabledButton]}
+                style={[
+                  styles.modalDeleteButton,
+                  deletingProduct && styles.disabledButton,
+                ]}
                 onPress={confirmarDeleteProducto}
                 disabled={deletingProduct}
               >
@@ -564,7 +736,9 @@ export default function DetalleListaScreen() {
         visible={finishListModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => !finishingList && setFinishListModalVisible(false)}
+        onRequestClose={() =>
+          !finishingList && setFinishListModalVisible(false)
+        }
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -572,8 +746,8 @@ export default function DetalleListaScreen() {
 
             <Text style={styles.modalText}>
               ¿Seguro que quieres finalizar{" "}
-              <Text style={styles.modalStrong}>{lista.nombre_lista}</Text>? Se guardará
-              una copia con sus productos y total en el historial.
+              <Text style={styles.modalStrong}>{lista.nombre_lista}</Text>? Se
+              guardará una copia con sus productos y total en el historial.
             </Text>
 
             <View style={styles.modalActions}>
@@ -586,7 +760,10 @@ export default function DetalleListaScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalPrimaryButton, finishingList && styles.disabledButton]}
+                style={[
+                  styles.modalPrimaryButton,
+                  finishingList && styles.disabledButton,
+                ]}
                 onPress={confirmarFinalizarLista}
                 disabled={finishingList}
               >
@@ -611,8 +788,8 @@ export default function DetalleListaScreen() {
 
             <Text style={styles.modalText}>
               ¿Seguro que quieres eliminar{" "}
-              <Text style={styles.modalStrong}>{lista.nombre_lista}</Text>? También se
-              eliminarán sus productos.
+              <Text style={styles.modalStrong}>{lista.nombre_lista}</Text>?
+              También se eliminarán sus productos.
             </Text>
 
             <View style={styles.modalActions}>
@@ -625,12 +802,59 @@ export default function DetalleListaScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalDeleteButton, deletingList && styles.disabledButton]}
+                style={[
+                  styles.modalDeleteButton,
+                  deletingList && styles.disabledButton,
+                ]}
                 onPress={confirmarDeleteLista}
                 disabled={deletingList}
               >
                 <Text style={styles.modalDeleteText}>
                   {deletingList ? "Eliminando..." : "Eliminar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={exitSharedModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          !exitingSharedList && setExitSharedModalVisible(false)
+        }
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Quitar de mis compartidos</Text>
+
+            <Text style={styles.modalText}>
+              ¿Seguro que quieres quitar{" "}
+              <Text style={styles.modalStrong}>{lista.nombre_lista}</Text> de
+              tus compartidos? La lista no se eliminará para su propietario.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setExitSharedModalVisible(false)}
+                disabled={exitingSharedList}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalDeleteButton,
+                  exitingSharedList && styles.disabledButton,
+                ]}
+                onPress={confirmarSalirDeCompartidos}
+                disabled={exitingSharedList}
+              >
+                <Text style={styles.modalDeleteText}>
+                  {exitingSharedList ? "Quitando..." : "Quitar"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -648,7 +872,7 @@ export default function DetalleListaScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Compartir lista</Text>
             <Text style={styles.modalText}>
-              Introduce el email del usuario con el que quieres compartir la lista.
+              Introduce el email del usuario y elige el tipo de acceso.
             </Text>
 
             <TextInput
@@ -662,6 +886,54 @@ export default function DetalleListaScreen() {
               editable={!sharing}
             />
 
+            <View style={styles.permissionBox}>
+              <TouchableOpacity
+                style={[
+                  styles.permissionOption,
+                  shareTipoCompartido === "edicion" &&
+                  styles.permissionOptionActive,
+                ]}
+                onPress={() => setShareTipoCompartido("edicion")}
+                disabled={sharing}
+              >
+                <Text
+                  style={[
+                    styles.permissionOptionTitle,
+                    shareTipoCompartido === "edicion" &&
+                    styles.permissionOptionTitleActive,
+                  ]}
+                >
+                  Con privilegios
+                </Text>
+                <Text style={styles.permissionOptionText}>
+                  Puede ver la lista y modificar productos.
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.permissionOption,
+                  shareTipoCompartido === "visualizacion" &&
+                  styles.permissionOptionActive,
+                ]}
+                onPress={() => setShareTipoCompartido("visualizacion")}
+                disabled={sharing}
+              >
+                <Text
+                  style={[
+                    styles.permissionOptionTitle,
+                    shareTipoCompartido === "visualizacion" &&
+                    styles.permissionOptionTitleActive,
+                  ]}
+                >
+                  Solo visualización
+                </Text>
+                <Text style={styles.permissionOptionText}>
+                  Puede ver la lista, pero no modificarla.
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancelButton}
@@ -672,7 +944,10 @@ export default function DetalleListaScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalPrimaryButton, sharing && styles.disabledButton]}
+                style={[
+                  styles.modalPrimaryButton,
+                  sharing && styles.disabledButton,
+                ]}
                 onPress={handleShareList}
                 disabled={sharing}
               >
@@ -700,6 +975,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: Colors.background,
     padding: 20,
+  },
+  centerButton: {
+    flex: 0,
+    marginTop: 12,
+    paddingHorizontal: 24,
   },
   loadingText: {
     marginTop: 12,
@@ -852,6 +1132,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
   },
+  readOnlyBox: {
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+  readOnlyTitle: {
+    color: "#92400E",
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  readOnlyText: {
+    color: "#92400E",
+    lineHeight: 20,
+  },
   ownerActions: {
     gap: 10,
     marginBottom: 18,
@@ -877,6 +1174,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 18,
   },
   dangerOutlineButtonText: {
     color: "#B91C1C",
@@ -954,6 +1252,17 @@ const styles = StyleSheet.create({
     color: "#B91C1C",
     fontWeight: "900",
   },
+  readOnlyQuantityRow: {
+    backgroundColor: Colors.backgroundAlt,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignSelf: "flex-start",
+  },
+  readOnlyQuantityText: {
+    color: Colors.title,
+    fontWeight: "900",
+  },
   emptyBox: {
     paddingVertical: 34,
     alignItems: "center",
@@ -1011,6 +1320,33 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     color: Colors.text,
     marginBottom: 18,
+  },
+  permissionBox: {
+    gap: 10,
+    marginBottom: 18,
+  },
+  permissionOption: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: Colors.white,
+  },
+  permissionOptionActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.backgroundAlt,
+  },
+  permissionOptionTitle: {
+    color: Colors.title,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  permissionOptionTitleActive: {
+    color: Colors.primary,
+  },
+  permissionOptionText: {
+    color: Colors.textMuted,
+    lineHeight: 19,
   },
   modalActions: {
     flexDirection: "row",
