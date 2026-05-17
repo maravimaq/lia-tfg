@@ -106,7 +106,7 @@ export default function HistorialScreen() {
           >
             <View style={styles.cardContent}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Lista finalizada</Text>
+                <Text style={styles.cardTitle}>{item.nombre_lista ?? "Lista finalizada"}</Text>
                 <View style={styles.statusBadge}>
                   <Text style={styles.statusText}>{item.estado}</Text>
                 </View>

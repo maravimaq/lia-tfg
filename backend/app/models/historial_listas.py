@@ -10,7 +10,7 @@ class HistorialListas(Base):
     __tablename__ = "historial_listas"
 
     id_historial = Column(Integer, primary_key=True, index=True)
-
+    nombre_lista = Column(String(255), nullable=True)
     fecha = Column(DateTime, nullable=False, default=datetime.utcnow)
     estado = Column(String, nullable=False, default="finalizada")
     num_productos = Column(Integer, nullable=False, default=0)

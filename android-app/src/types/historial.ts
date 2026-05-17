@@ -2,6 +2,7 @@ export type MoneyValue = number | string;
 
 export interface HistorialLista {
   id_historial: number;
+  nombre_lista?: string | null;
   fecha: string;
   lista_id: number;
   usuario_id: number;

@@ -180,7 +180,7 @@ export default function DetalleHistorialScreen() {
             <View style={styles.summaryCard}>
               <View style={styles.summaryHeader}>
                 <View>
-                  <Text style={styles.title}>Detalle historial</Text>
+                  <Text style={styles.title}>{historial.nombre_lista ?? "Lista finalizada"}</Text>
                   <Text style={styles.date}>{formatDate(historial.fecha)}</Text>
                 </View>
 

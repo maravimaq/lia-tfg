@@ -7,7 +7,9 @@ from app.models.lista_compra import ListaCompra
 from app.models.producto_lista import ProductoLista
 from app.models.user import User
 from app.repositories.historial_listas_repository import HistorialListasRepository
-from app.repositories.historial_producto_lista_repository import HistorialProductoListaRepository
+from app.repositories.historial_producto_lista_repository import (
+    HistorialProductoListaRepository,
+)
 from app.repositories.lista_compra_repository import ListaCompraRepository
 from app.repositories.producto_lista_repository import ProductoListaRepository
 
@@ -18,7 +20,7 @@ class HistorialListasService:
     def finalizar_lista(
         db: Session,
         lista_id: int,
-        current_user: User
+        current_user: User,
     ) -> HistorialListas:
 
         lista = ListaCompraRepository.get_by_id(db, lista_id)
@@ -26,24 +28,24 @@ class HistorialListasService:
         if not lista:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista no encontrada"
+                detail="Lista no encontrada",
             )
 
         if lista.usuario_id != current_user.id_usuario:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para finalizar esta lista"
+                detail="No tienes permiso para finalizar esta lista",
             )
 
         historial_existente = HistorialListasRepository.get_by_lista_id(
             db,
-            lista_id
+            lista_id,
         )
 
         if historial_existente:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Esta lista ya ha sido finalizada"
+                detail="Esta lista ya ha sido finalizada",
             )
 
         productos_lista = ProductoListaRepository.get_by_lista_id(db, lista_id)
@@ -51,15 +53,16 @@ class HistorialListasService:
         if not productos_lista:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No puedes finalizar una lista vacía"
+                detail="No puedes finalizar una lista vacía",
             )
 
         historial = HistorialListas(
             lista_id=lista.id_lista,
             usuario_id=current_user.id_usuario,
+            nombre_lista=lista.nombre_lista,
             estado="finalizada",
             num_productos=sum(producto.cantidad for producto in productos_lista),
-            total_gastado=lista.total_estimado
+            total_gastado=lista.total_estimado,
         )
 
         historial_creado = HistorialListasRepository.create(db, historial)
@@ -80,7 +83,7 @@ class HistorialListasService:
                     unidad_medida=producto_catalogo.unidad_medida,
                     precio_unitario=producto_catalogo.precio_unitario,
                     cantidad=producto_lista.cantidad,
-                    precio_estimado=producto_lista.precio_estimado
+                    precio_estimado=producto_lista.precio_estimado,
                 )
             )
 
@@ -91,19 +94,19 @@ class HistorialListasService:
     @staticmethod
     def get_mi_historial(
         db: Session,
-        current_user: User
+        current_user: User,
     ) -> list[HistorialListas]:
 
         return HistorialListasRepository.get_all_by_user_id(
             db,
-            current_user.id_usuario
+            current_user.id_usuario,
         )
 
     @staticmethod
     def get_historial_by_id(
         db: Session,
         historial_id: int,
-        current_user: User
+        current_user: User,
     ) -> HistorialListas:
 
         historial = HistorialListasRepository.get_by_id(db, historial_id)
@@ -111,13 +114,13 @@ class HistorialListasService:
         if not historial:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Historial no encontrado"
+                detail="Historial no encontrado",
             )
 
         if historial.usuario_id != current_user.id_usuario:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para acceder a este historial"
+                detail="No tienes permiso para acceder a este historial",
             )
 
         return historial
@@ -126,60 +129,67 @@ class HistorialListasService:
     def get_detalle_historial(
         db: Session,
         historial_id: int,
-        current_user: User
+        current_user: User,
     ) -> dict:
 
         historial = HistorialListasService.get_historial_by_id(
             db,
             historial_id,
-            current_user
+            current_user,
         )
 
         productos = HistorialProductoListaRepository.get_by_historial_id(
             db,
-            historial_id
+            historial_id,
         )
 
         return {
             "id_historial": historial.id_historial,
+            "nombre_lista": historial.nombre_lista,
             "fecha": historial.fecha,
             "estado": historial.estado,
             "num_productos": historial.num_productos,
             "total_gastado": historial.total_gastado,
             "lista_id": historial.lista_id,
             "usuario_id": historial.usuario_id,
-            "productos": productos
+            "productos": productos,
         }
 
     @staticmethod
     def repetir_lista(
         db: Session,
         historial_id: int,
-        current_user: User
+        current_user: User,
     ) -> ListaCompra:
 
         historial = HistorialListasService.get_historial_by_id(
             db,
             historial_id,
-            current_user
+            current_user,
         )
 
         productos_historial = HistorialProductoListaRepository.get_by_historial_id(
             db,
-            historial_id
+            historial_id,
         )
 
         if not productos_historial:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No se puede repetir una lista sin productos"
+                detail="No se puede repetir una lista sin productos",
             )
 
+        nombre_original = (
+            historial.nombre_lista
+            if historial.nombre_lista
+            else f"lista {historial.id_historial}"
+        )
+
         nueva_lista = ListaCompra(
-            nombre_lista=f"Copia de lista {historial.id_historial}",
+            nombre_lista=f"Copia de {nombre_original}",
             compartida=False,
             total_estimado=historial.total_gastado,
-            usuario_id=current_user.id_usuario
+            usuario_id=current_user.id_usuario,
         )
 
         nueva_lista = ListaCompraRepository.create(db, nueva_lista)
@@ -192,7 +202,7 @@ class HistorialListasService:
                     lista_id=nueva_lista.id_lista,
                     producto_id=producto_historial.producto_id,
                     cantidad=producto_historial.cantidad,
-                    precio_estimado=producto_historial.precio_estimado
+                    precio_estimado=producto_historial.precio_estimado,
                 )
             )
 
