@@ -1,5 +1,7 @@
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
+from app.models.historial_listas import HistorialListas
 from app.models.lista_compartida import ListaCompartida
 
 
@@ -38,10 +40,14 @@ class ListaCompartidaRepository:
         db: Session,
         usuario_id: int
     ) -> list[ListaCompartida]:
+        lista_finalizada_exists = exists().where(
+            HistorialListas.lista_id == ListaCompartida.lista_id
+        )
 
         return (
             db.query(ListaCompartida)
             .filter(ListaCompartida.usuario_id == usuario_id)
+            .filter(~lista_finalizada_exists)
             .all()
         )
 

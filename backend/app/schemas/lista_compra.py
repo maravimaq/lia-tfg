@@ -26,6 +26,7 @@ class ListaCompraResponse(ListaCompraBase):
     fecha_modificacion: datetime
     total_estimado: Decimal
     usuario_id: int
+    tipo_compartido: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

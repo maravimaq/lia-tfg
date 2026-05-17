@@ -15,6 +15,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Colors } from "@/src/constants/colors";
 import { useAuth } from "@/src/hooks/useAuth";
 import { listasService } from "@/src/services/listas";
+import { historialService } from "@/src/services/historial";
 import { ListaCompraDetalle, ProductoLista } from "@/src/types/lista";
 
 function formatEuro(value?: string | number | null) {
@@ -66,6 +67,8 @@ export default function DetalleListaScreen() {
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [sharing, setSharing] = useState(false);
+  const [finishListModalVisible, setFinishListModalVisible] = useState(false);
+  const [finishingList, setFinishingList] = useState(false);
 
   const isOwner = useMemo(() => {
     if (!lista || !user) return false;
@@ -276,6 +279,37 @@ export default function DetalleListaScreen() {
     }
   };
 
+  const confirmarFinalizarLista = async () => {
+    if (!lista) return;
+
+    try {
+      setFinishingList(true);
+
+      await historialService.finalizarLista(lista.id_lista);
+
+      setFinishListModalVisible(false);
+
+      Alert.alert(
+        "Lista finalizada",
+        "La lista se ha guardado correctamente en el historial.",
+        [
+          {
+            text: "Ver historial",
+            onPress: () => router.replace("/historial"),
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert(
+        "Error",
+        error?.response?.data?.detail || "No se ha podido finalizar la lista."
+      );
+    } finally {
+      setFinishingList(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -405,12 +439,22 @@ export default function DetalleListaScreen() {
             </View>
 
             {isOwner ? (
-              <TouchableOpacity
-                style={styles.dangerOutlineButton}
-                onPress={() => setDeleteListModalVisible(true)}
-              >
-                <Text style={styles.dangerOutlineButtonText}>Eliminar lista</Text>
-              </TouchableOpacity>
+              <View style={styles.ownerActions}>
+                <TouchableOpacity
+                  style={[styles.finishButton, finishingList && styles.disabledButton]}
+                  onPress={() => setFinishListModalVisible(true)}
+                  disabled={finishingList}
+                >
+                  <Text style={styles.finishButtonText}>Finalizar lista</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dangerOutlineButton}
+                  onPress={() => setDeleteListModalVisible(true)}
+                >
+                  <Text style={styles.dangerOutlineButtonText}>Eliminar lista</Text>
+                </TouchableOpacity>
+              </View>
             ) : null}
 
             <Text style={styles.sectionTitle}>Productos de la lista</Text>
@@ -509,6 +553,45 @@ export default function DetalleListaScreen() {
               >
                 <Text style={styles.modalDeleteText}>
                   {deletingProduct ? "Eliminando..." : "Eliminar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={finishListModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !finishingList && setFinishListModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Finalizar lista</Text>
+
+            <Text style={styles.modalText}>
+              ¿Seguro que quieres finalizar{" "}
+              <Text style={styles.modalStrong}>{lista.nombre_lista}</Text>? Se guardará
+              una copia con sus productos y total en el historial.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setFinishListModalVisible(false)}
+                disabled={finishingList}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalPrimaryButton, finishingList && styles.disabledButton]}
+                onPress={confirmarFinalizarLista}
+                disabled={finishingList}
+              >
+                <Text style={styles.modalPrimaryText}>
+                  {finishingList ? "Finalizando..." : "Finalizar"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -769,6 +852,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
   },
+  ownerActions: {
+    gap: 10,
+    marginBottom: 18,
+  },
+  finishButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
+    backgroundColor: "#ECFDF5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  finishButtonText: {
+    color: "#166534",
+    fontWeight: "900",
+  },
   dangerOutlineButton: {
     minHeight: 44,
     borderRadius: 14,
@@ -777,7 +877,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 18,
   },
   dangerOutlineButtonText: {
     color: "#B91C1C",

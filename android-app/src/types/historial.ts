@@ -1,31 +1,31 @@
-import { ListaCompra } from "./lista";
+export type MoneyValue = number | string;
 
-export type HistorialLista = {
+export interface HistorialLista {
   id_historial: number;
   fecha: string;
-  estado: string;
-  num_productos: number;
-  total_gastado: string;
   lista_id: number;
   usuario_id: number;
-};
+  estado: string;
+  num_productos: number;
+  total_gastado: MoneyValue;
+}
 
-export type HistorialProductoLista = {
+export interface HistorialProductoLista {
   id_historial_producto: number;
   historial_id: number;
-  producto_id: number | null;
+
+  producto_id?: number | null;
   nombre_producto: string;
-  marca: string | null;
-  categoria: string | null;
+  marca?: string | null;
+  categoria?: string | null;
   supermercado: string;
-  unidad_medida: string | null;
-  precio_unitario: string;
+  unidad_medida?: string | null;
+
+  precio_unitario: MoneyValue;
   cantidad: number;
-  precio_estimado: string;
-};
+  precio_estimado: MoneyValue;
+}
 
-export type HistorialListaDetalle = HistorialLista & {
+export interface HistorialListaDetalle extends HistorialLista {
   productos: HistorialProductoLista[];
-};
-
-export type RepetirListaResponse = ListaCompra;
+}

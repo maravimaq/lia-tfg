@@ -19,6 +19,12 @@ class HistorialListasRepository:
         ).first()
 
     @staticmethod
+    def get_by_lista_id(db: Session, lista_id: int) -> HistorialListas | None:
+        return db.query(HistorialListas).filter(
+            HistorialListas.lista_id == lista_id
+        ).first()
+
+    @staticmethod
     def get_all_by_user_id(
         db: Session,
         user_id: int

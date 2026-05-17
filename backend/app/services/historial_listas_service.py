@@ -35,6 +35,17 @@ class HistorialListasService:
                 detail="No tienes permiso para finalizar esta lista"
             )
 
+        historial_existente = HistorialListasRepository.get_by_lista_id(
+            db,
+            lista_id
+        )
+
+        if historial_existente:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Esta lista ya ha sido finalizada"
+            )
+
         productos_lista = ProductoListaRepository.get_by_lista_id(db, lista_id)
 
         if not productos_lista:
