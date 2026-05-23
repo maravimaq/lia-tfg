@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -13,6 +13,11 @@ class ListaCompartida(Base):
 
     lista_id = Column(Integer, ForeignKey("listas_compra.id_lista"), nullable=False)
     usuario_id = Column(Integer, ForeignKey("users.id_usuario"), nullable=False)
+
+    # Valores permitidos:
+    # - "edicion": el usuario invitado puede ver y modificar productos.
+    # - "visualizacion": el usuario invitado solo puede ver la lista.
+    tipo_compartido = Column(String(20), nullable=False, default="edicion")
 
     fecha_compartida = Column(DateTime, nullable=False, default=datetime.utcnow)
 

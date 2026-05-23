@@ -1,6 +1,7 @@
-from sqlalchemy import func
+from sqlalchemy import exists, func
 from sqlalchemy.orm import Session
 
+from app.models.historial_listas import HistorialListas
 from app.models.lista_compra import ListaCompra
 
 
@@ -19,9 +20,14 @@ class ListaCompraRepository:
 
     @staticmethod
     def get_all_by_user_id(db: Session, user_id: int) -> list[ListaCompra]:
+        lista_finalizada_exists = exists().where(
+            HistorialListas.lista_id == ListaCompra.id_lista
+        )
+
         return (
             db.query(ListaCompra)
             .filter(ListaCompra.usuario_id == user_id)
+            .filter(~lista_finalizada_exists)
             .order_by(ListaCompra.fecha_creacion.desc())
             .all()
         )
