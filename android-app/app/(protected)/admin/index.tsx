@@ -106,15 +106,17 @@ export default function AdminDashboardScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.profileHeader}>
+      <View style={styles.header}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials(user?.nombre_completo)}</Text>
         </View>
         <Text style={styles.username}>@{user?.nombre_usuario}</Text>
       </View>
 
-      <View style={styles.titleWrap}>
-        <Text style={styles.title}>Panel de Administración</Text>
+      <View style={styles.tabs}>
+        <View style={[styles.tab, styles.tabActive]}>
+          <Text style={[styles.tabText, styles.tabTextActive]}>Panel de Administración</Text>
+        </View>
       </View>
 
       {dashboard?.solicitudes_eliminacion_pendientes?.length ? (
@@ -255,29 +257,59 @@ const styles = StyleSheet.create({
     color: Colors.title,
     fontWeight: "800",
   },
-  profileHeader: { alignItems: "center", marginBottom: 8 },
+  header: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: Colors.softBlue,
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    backgroundColor: Colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarText: { fontSize: 28, color: Colors.title, fontWeight: "800" },
-  username: { marginTop: 8, color: Colors.textMuted, fontSize: 16 },
-  titleWrap: {
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: Colors.border,
-    paddingVertical: 8,
-    marginBottom: 12,
+  avatarText: {
+    fontSize: 30,
+    color: Colors.white,
+    fontWeight: "800",
   },
-  title: { textAlign: "center", fontSize: 32, fontWeight: "800", color: Colors.title },
+  username: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Colors.title,
+    marginTop: 8,
+  },
+  tabs: {
+    flexDirection: "row",
+    marginBottom: 14,
+    gap: 10,
+  },
+  tab: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  tabActive: {
+    backgroundColor: "#eceefe",
+    borderColor: "#cfd3ff",
+  },
+  tabText: {
+    color: Colors.text,
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  tabTextActive: {
+    color: Colors.title,
+  },
   statsRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
   statBox: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: 12,
@@ -312,14 +344,14 @@ const styles = StyleSheet.create({
   priorityText: { color: Colors.title, fontWeight: "800", marginBottom: 4 },
   prioritySubtext: { color: Colors.textMuted, fontSize: 12 },
   card: {
-    backgroundColor: Colors.card,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.textMuted,
-    borderRadius: 18,
-    padding: 14,
+    borderColor: Colors.border,
+    padding: 16,
     marginBottom: 12,
   },
-  cardTitle: { fontSize: 32, color: Colors.title, fontWeight: "800", marginBottom: 8, textAlign: "center" },
+  cardTitle: { fontSize: 18, color: Colors.title, fontWeight: "800", marginBottom: 8, textAlign: "center" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
   label: { color: Colors.text, fontWeight: "600" },
   value: { color: Colors.text },
