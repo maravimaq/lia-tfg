@@ -173,6 +173,14 @@ class AdminService:
                 "selector": None,
                 "price_regex": AdminService.DEFAULT_PRICE_REGEX,
             },
+            {
+                "supermercado": "Carrefour",
+                "urls": ["https://www.carrefour.es/supermercado"],
+                "crawl_internal_links": False,
+                "link_include_regex": None,
+                "selector": None,
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
+            },
         ]
 
     @staticmethod
@@ -1084,7 +1092,7 @@ class AdminService:
                     source["productos_actualizados"] = 0
 
                 try:
-                    if supermercado_key not in {"DIA", "MERCADONA"}:
+                    if supermercado_key not in {"DIA", "MERCADONA", "CARREFOUR"}:
                         with AdminService._scraping_lock:
                             source["estado"] = "pendiente"
                             source["fecha"] = datetime.now().strftime("%d %b %Y - %H:%M")
@@ -1105,6 +1113,9 @@ class AdminService:
                             dia_max_categories=settings.dia_max_categories,
                             dia_max_pages_per_category=settings.dia_max_pages_per_category,
                             mercadona_max_categories=settings.mercadona_max_categories,
+                            carrefour_max_urls=settings.carrefour_max_urls,
+                            carrefour_max_products_per_url=settings.carrefour_max_products_per_url,
+                            carrefour_use_playwright_fallback=settings.carrefour_use_playwright_fallback,
                         )
 
                         summary = asyncio.run(

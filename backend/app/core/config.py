@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     
     # Mercadona
     mercadona_max_categories: int = 40
+    
+    # Carrefour
+    carrefour_max_urls: int = 3
+    carrefour_max_products_per_url: int = 40
+    carrefour_use_playwright_fallback: bool = True
 
     model_config = SettingsConfigDict(env_file=".env")
 

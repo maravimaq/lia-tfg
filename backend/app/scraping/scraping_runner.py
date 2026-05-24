@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.scraping.base import DEFAULT_USER_AGENT, ScraperRunResult
 from app.scraping.catalog_importer import CatalogImporter, CatalogImportResult
+from app.scraping.carrefour_scraper import CarrefourScraper
 from app.scraping.dia_scraper import DiaScraper
 from app.scraping.mercadona_scraper import MercadonaScraper
 
@@ -98,7 +99,7 @@ class ScrapingRunner:
     Orquestador de scraping de catálogo.
 
     Este runner debe ser llamado desde AdminService.
-    AdminService no debería saber cómo parsear DIA, Mercadona, Lidl, etc.
+    AdminService no debería saber cómo parsear DIA, Mercadona, Carrefour, etc.
     """
 
     def __init__(
@@ -111,6 +112,9 @@ class ScrapingRunner:
         dia_max_categories: int = 20,
         dia_max_pages_per_category: int = 3,
         mercadona_max_categories: int = 40,
+        carrefour_max_urls: int = 3,
+        carrefour_max_products_per_url: int = 40,
+        carrefour_use_playwright_fallback: bool = True,
     ) -> None:
         self.db = db
         self.timeout_seconds = timeout_seconds
@@ -121,6 +125,10 @@ class ScrapingRunner:
         self.dia_max_pages_per_category = dia_max_pages_per_category
 
         self.mercadona_max_categories = mercadona_max_categories
+
+        self.carrefour_max_urls = carrefour_max_urls
+        self.carrefour_max_products_per_url = carrefour_max_products_per_url
+        self.carrefour_use_playwright_fallback = carrefour_use_playwright_fallback
 
         self.importer = CatalogImporter(db)
 
@@ -142,6 +150,11 @@ class ScrapingRunner:
         if "MERCADONA" in selected:
             source_results.append(
                 await self._run_mercadona(commit=commit)
+            )
+
+        if "CARREFOUR" in selected:
+            source_results.append(
+                await self._run_carrefour(commit=commit)
             )
 
         summary = self._build_summary(source_results)
@@ -183,6 +196,25 @@ class ScrapingRunner:
             timeout_seconds=self.timeout_seconds,
             user_agent=self.user_agent,
             max_categories=self.mercadona_max_categories,
+        )
+
+        try:
+            scraper_result = await scraper.scrape()
+        finally:
+            await scraper.close()
+
+        return self._import_scraper_result(
+            scraper_result,
+            commit=commit,
+        )
+
+    async def _run_carrefour(self, *, commit: bool) -> SourceExecutionResult:
+        scraper = CarrefourScraper(
+            timeout_seconds=self.timeout_seconds,
+            user_agent=self.user_agent,
+            max_urls=self.carrefour_max_urls,
+            max_products_per_url=self.carrefour_max_products_per_url,
+            use_playwright_fallback=self.carrefour_use_playwright_fallback,
         )
 
         try:
@@ -290,7 +322,7 @@ class ScrapingRunner:
     @staticmethod
     def _normalize_supermarkets(supermarkets: Optional[list[str]]) -> set[str]:
         if not supermarkets:
-            return {"DIA", "MERCADONA"}
+            return {"DIA", "MERCADONA", "CARREFOUR"}
 
         return {
             supermarket.strip().upper()
