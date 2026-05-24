@@ -20,6 +20,20 @@ class ProductoListaRepository:
 
     @staticmethod
     def get_by_lista_id(db: Session, lista_id: int) -> list[ProductoLista]:
-        return db.query(ProductoLista).filter(
-            ProductoLista.lista_id == lista_id
-        ).all()
+        return (
+            db.query(ProductoLista)
+            .filter(ProductoLista.lista_id == lista_id)
+            .order_by(ProductoLista.id_producto_lista.asc())
+            .all()
+        )
+
+    @staticmethod
+    def save(db: Session, producto: ProductoLista) -> ProductoLista:
+        db.commit()
+        db.refresh(producto)
+        return producto
+
+    @staticmethod
+    def delete(db: Session, producto: ProductoLista) -> None:
+        db.delete(producto)
+        db.commit()

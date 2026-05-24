@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -20,6 +21,7 @@ type Props = {
 };
 
 type MenuItemProps = {
+  icon: string;
   label: string;
   onPress: () => void;
   danger?: boolean;
@@ -28,7 +30,13 @@ type MenuItemProps = {
 
 type ConfirmationAction = "logout" | "delete" | null;
 
-function MenuItem({ label, onPress, danger = false, disabled = false }: MenuItemProps) {
+function MenuItem({
+  icon,
+  label,
+  onPress,
+  danger = false,
+  disabled = false,
+}: MenuItemProps) {
   return (
     <Pressable
       style={[styles.item, disabled && styles.disabledItem]}
@@ -36,7 +44,13 @@ function MenuItem({ label, onPress, danger = false, disabled = false }: MenuItem
       disabled={disabled}
       hitSlop={8}
     >
-      <Text style={[styles.itemText, danger && styles.dangerText]}>{label}</Text>
+      <View style={styles.iconBox}>
+        <Text style={[styles.icon, danger && styles.dangerText]}>{icon}</Text>
+      </View>
+
+      <Text style={[styles.itemText, danger && styles.dangerText]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -48,7 +62,8 @@ export default function ProfileSideMenu({
   onDeleteAccount,
   isAdmin = false,
 }: Props) {
-  const [confirmationAction, setConfirmationAction] = useState<ConfirmationAction>(null);
+  const [confirmationAction, setConfirmationAction] =
+    useState<ConfirmationAction>(null);
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
@@ -64,11 +79,17 @@ export default function ProfileSideMenu({
     onClose();
   };
 
+  const goTo = (path: string) => {
+    onClose();
+    router.push(path as never);
+  };
+
   const handleConfirmedAction = async () => {
     if (!confirmationAction || processing) return;
 
     try {
       setProcessing(true);
+
       const actionToRun = confirmationAction;
       setConfirmationAction(null);
       onClose();
@@ -83,7 +104,7 @@ export default function ProfileSideMenu({
         return;
       }
 
-      router.push("/(protected)/profile/account-action");
+      router.push("/(protected)/profile/account-action" as never);
     } finally {
       setProcessing(false);
     }
@@ -97,6 +118,7 @@ export default function ProfileSideMenu({
         <Text style={styles.confirmationTitle}>
           {isLogout ? "Cerrar sesión" : "Eliminar cuenta"}
         </Text>
+
         <Text style={styles.confirmationText}>
           {isLogout
             ? "¿Estás seguro de que quieres cerrar sesión?"
@@ -111,6 +133,7 @@ export default function ProfileSideMenu({
             disabled={processing}
             style={styles.confirmationButton}
           />
+
           <AppButton
             title={isLogout ? "Cerrar sesión" : "Eliminar cuenta"}
             variant="danger"
@@ -131,12 +154,21 @@ export default function ProfileSideMenu({
       onRequestClose={closeMenu}
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={closeMenu} disabled={processing} />
+        <Pressable
+          style={styles.backdrop}
+          onPress={closeMenu}
+          disabled={processing}
+        />
+
         <View style={styles.panel}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Menú</Text>
-            <Pressable onPress={closeMenu} disabled={processing} hitSlop={8}>
-              <Text style={styles.close}>✕</Text>
+          <View style={styles.closeRow}>
+            <Pressable
+              style={styles.closeButton}
+              onPress={closeMenu}
+              disabled={processing}
+              hitSlop={8}
+            >
+              <Text style={styles.close}>×</Text>
             </Pressable>
           </View>
 
@@ -144,79 +176,96 @@ export default function ProfileSideMenu({
             renderConfirmation()
           ) : (
             <>
-              <MenuItem
-                label="Configuración Bot Externo"
-                onPress={() => {
-                  onClose();
-                  router.push("/(protected)/profile/bot-config");
-                }}
-              />
-
-              <MenuItem
-                label="FAQ"
-                onPress={() => {
-                  onClose();
-                  router.push("/(protected)/profile/faq");
-                }}
-              />
-
-              <MenuItem
-                label="Sobre LIA"
-                onPress={() => {
-                  onClose();
-                  router.push("/(protected)/profile/about");
-                }}
-              />
-
-              <MenuItem
-                label="Ayuda y Soporte"
-                onPress={() => {
-                  onClose();
-                  router.push("/(protected)/profile/support");
-                }}
-              />
-
-              <MenuItem
-                label="Información de Contacto"
-                onPress={() => {
-                  onClose();
-                  router.push("/(protected)/profile/contact-info");
-                }}
-              />
-
-              {isAdmin ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+              >
                 <MenuItem
-                  label="Panel de administración"
-                  onPress={() => {
-                    onClose();
-                    router.push("/(protected)/admin");
-                  }}
+                  icon="⚙"
+                  label="Configuración Bot Externo"
+                  onPress={() => goTo("/(protected)/profile/bot-config")}
                 />
-              ) : null}
 
-              <MenuItem
-                label="Mi perfil"
-                onPress={() => {
-                  onClose();
-                  router.push("/(protected)/profile");
-                }}
-              />
+                <MenuItem
+                  icon="?"
+                  label="FAQ"
+                  onPress={() => goTo("/(protected)/profile/faq")}
+                />
 
-              <View style={styles.separator} />
+                <MenuItem
+                  icon="i"
+                  label="Sobre LIA"
+                  onPress={() => goTo("/(protected)/profile/about")}
+                />
 
-              <MenuItem
-                label="Cerrar sesión"
-                onPress={() => setConfirmationAction("logout")}
-                danger
-              />
+                <MenuItem
+                  icon="○"
+                  label="Ayuda y Soporte"
+                  onPress={() => goTo("/(protected)/profile/support")}
+                />
 
-              <MenuItem
-                label="Eliminar cuenta"
-                onPress={() => setConfirmationAction("delete")}
-                danger
-              />
+                <MenuItem
+                  icon="✉"
+                  label="Información de Contacto"
+                  onPress={() => goTo("/(protected)/profile/contact-info")}
+                />
 
-              <Text style={styles.footer}>© 2025-2026 LIA</Text>
+                <View style={styles.separator} />
+
+                <MenuItem
+                  icon="☷"
+                  label="Mis Listas Pendientes"
+                  onPress={() => goTo("/listas")}
+                />
+
+                <MenuItem
+                  icon="☷"
+                  label="Historial de Listas"
+                  onPress={() => goTo("/historial")}
+                />
+
+                <MenuItem
+                  icon="%"
+                  label="Comparador Precios"
+                  onPress={() => goTo("/productos/comparar")}
+                />
+
+                {isAdmin ? (
+                  <MenuItem
+                    icon="▦"
+                    label="Panel Admin"
+                    onPress={() => goTo("/(protected)/admin")}
+                  />
+                ) : null}
+
+                <MenuItem
+                  icon="◉"
+                  label="Mi perfil"
+                  onPress={() => goTo("/(protected)/profile")}
+                />
+
+                <View style={styles.separator} />
+
+                <MenuItem
+                  icon="↪"
+                  label="Cerrar Sesión"
+                  onPress={() => setConfirmationAction("logout")}
+                  danger
+                />
+
+                <View style={styles.smallSeparator} />
+
+                <MenuItem
+                  icon="▢"
+                  label="Eliminar Cuenta"
+                  onPress={() => setConfirmationAction("delete")}
+                  danger
+                />
+              </ScrollView>
+
+              <View style={styles.footerBox}>
+                <Text style={styles.footer}>© 2025-2026 LIA</Text>
+              </View>
             </>
           )}
         </View>
@@ -229,60 +278,99 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0, 0, 0, 0.12)",
   },
   backdrop: {
     flex: 1,
   },
   panel: {
-    width: 290,
-    backgroundColor: Colors.surface,
-    paddingTop: 20,
-    paddingHorizontal: 18,
+    width: 220,
+    backgroundColor: "#E5E5E5",
     borderLeftWidth: 1,
-    borderLeftColor: Colors.border,
-    shadowColor: "#A9B6E5",
-    shadowOpacity: 0.15,
+    borderLeftColor: "#D0D0D0",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
     shadowRadius: 10,
-    shadowOffset: { width: -4, height: 0 },
+    shadowOffset: { width: -3, height: 0 },
+    elevation: 8,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  closeRow: {
+    alignItems: "flex-end",
+    paddingTop: 14,
+    paddingRight: 14,
+    paddingBottom: 6,
+  },
+  closeButton: {
+    width: 34,
+    height: 34,
     alignItems: "center",
-    marginBottom: 18,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Colors.title,
+    justifyContent: "center",
   },
   close: {
-    fontSize: 24,
-    color: Colors.text,
+    fontSize: 36,
+    color: "#222222",
     fontWeight: "700",
+    lineHeight: 36,
+  },
+  scrollContent: {
+    paddingBottom: 12,
   },
   item: {
-    paddingVertical: 12,
+    minHeight: 48,
+    paddingRight: 12,
+    paddingLeft: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconBox: {
+    width: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  icon: {
+    fontSize: 28,
+    color: "#222222",
+    fontWeight: "700",
+    textAlign: "center",
   },
   disabledItem: {
     opacity: 0.5,
   },
   itemText: {
-    fontSize: 16,
-    color: Colors.text,
-    fontWeight: "600",
+    flex: 1,
+    color: "#2D2D2D",
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: "right",
+    fontWeight: "500",
   },
   dangerText: {
-    color: Colors.danger,
+    color: "#E51D2A",
   },
   separator: {
-    marginTop: 8,
-    marginBottom: 8,
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: "#CFCFCF",
+    marginVertical: 8,
+    marginLeft: 58,
+    marginRight: 12,
+  },
+  smallSeparator: {
+    height: 1,
+    backgroundColor: "#CFCFCF",
+    marginVertical: 4,
+    marginLeft: 58,
+    marginRight: 12,
+  },
+  footerBox: {
+    borderTopWidth: 1,
+    borderTopColor: "#CFCFCF",
+    paddingTop: 10,
+    paddingBottom: 14,
+    paddingHorizontal: 12,
   },
   confirmationBox: {
+    margin: 12,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -308,9 +396,10 @@ const styles = StyleSheet.create({
     minHeight: 46,
   },
   footer: {
-    marginTop: 20,
-    color: Colors.textMuted,
-    fontSize: 12,
+    color: "#777777",
+    fontSize: 11,
     textAlign: "center",
+    fontWeight: "700",
+    letterSpacing: 0.4,
   },
 });

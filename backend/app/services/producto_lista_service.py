@@ -1,94 +1,277 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.models.lista_compra import ListaCompra
 from app.models.producto_lista import ProductoLista
 from app.models.user import User
+from app.repositories.historial_listas_repository import HistorialListasRepository
+from app.repositories.lista_compartida_repository import ListaCompartidaRepository
 from app.repositories.lista_compra_repository import ListaCompraRepository
 from app.repositories.producto_lista_repository import ProductoListaRepository
-from app.schemas.producto_lista import ProductoListaCreate
+from app.repositories.producto_repository import ProductoRepository
+from app.schemas.producto_lista import ProductoListaCreate, ProductoListaUpdate
 
 
 class ProductoListaService:
 
     @staticmethod
+    def _get_comparticion_usuario(
+        db: Session,
+        lista: ListaCompra,
+        current_user: User,
+    ):
+        if lista.usuario_id == current_user.id_usuario:
+            return None
+
+        return ListaCompartidaRepository.get_by_lista_and_usuario(
+            db,
+            lista.id_lista,
+            current_user.id_usuario,
+        )
+
+    @staticmethod
+    def _usuario_tiene_acceso(
+        db: Session,
+        lista: ListaCompra,
+        current_user: User,
+    ) -> bool:
+        if lista.usuario_id == current_user.id_usuario:
+            return True
+
+        comparticion = ProductoListaService._get_comparticion_usuario(
+            db,
+            lista,
+            current_user,
+        )
+
+        return comparticion is not None
+
+    @staticmethod
+    def _usuario_puede_modificar(
+        db: Session,
+        lista: ListaCompra,
+        current_user: User,
+    ) -> bool:
+        if lista.usuario_id == current_user.id_usuario:
+            return True
+
+        comparticion = ProductoListaService._get_comparticion_usuario(
+            db,
+            lista,
+            current_user,
+        )
+
+        return comparticion is not None and comparticion.tipo_compartido == "edicion"
+
+    @staticmethod
+    def _validar_lista_no_finalizada(db: Session, lista_id: int) -> None:
+        if HistorialListasRepository.get_by_lista_id(db, lista_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Esta lista ya está finalizada. Consulta el historial.",
+            )
+
+    @staticmethod
+    def _recalcular_total_lista(db: Session, lista_id: int) -> None:
+        lista = ListaCompraRepository.get_by_id(db, lista_id)
+
+        if not lista:
+            return
+
+        productos_lista = ProductoListaRepository.get_by_lista_id(db, lista_id)
+        lista.total_estimado = sum(
+            producto_lista.precio_estimado
+            for producto_lista in productos_lista
+        )
+
+        ListaCompraRepository.save(db, lista)
+
+    @staticmethod
     def create_producto(
         db: Session,
         producto_data: ProductoListaCreate,
-        current_user: User
+        current_user: User,
     ) -> ProductoLista:
         lista = ListaCompraRepository.get_by_id(db, producto_data.lista_id)
 
         if not lista:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista no encontrada"
+                detail="Lista no encontrada",
             )
 
-        if lista.usuario_id != current_user.id_usuario:
+        if not ProductoListaService._usuario_puede_modificar(db, lista, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para modificar esta lista"
+                detail="No tienes permiso para modificar esta lista",
             )
 
-        nuevo_producto = ProductoLista(
-            nombre_producto=producto_data.nombre_producto,
-            cantidad=producto_data.cantidad,
-            unidad_medida=producto_data.unidad_medida,
-            supermercado=producto_data.supermercado,
-            precio_estimado=producto_data.precio_estimado,
-            lista_id=producto_data.lista_id
+        ProductoListaService._validar_lista_no_finalizada(db, producto_data.lista_id)
+
+        producto_catalogo = ProductoRepository.get_by_id(
+            db,
+            producto_data.producto_id,
         )
 
-        return ProductoListaRepository.create(db, nuevo_producto)
+        if not producto_catalogo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Producto de catálogo no encontrado",
+            )
+
+        precio_estimado = producto_catalogo.precio_unitario * producto_data.cantidad
+
+        nuevo_producto_lista = ProductoLista(
+            lista_id=producto_data.lista_id,
+            producto_id=producto_data.producto_id,
+            cantidad=producto_data.cantidad,
+            precio_estimado=precio_estimado,
+        )
+
+        producto_creado = ProductoListaRepository.create(db, nuevo_producto_lista)
+
+        ProductoListaService._recalcular_total_lista(db, producto_data.lista_id)
+
+        return producto_creado
 
     @staticmethod
     def get_productos_by_lista(
         db: Session,
         lista_id: int,
-        current_user: User
+        current_user: User,
     ) -> list[ProductoLista]:
         lista = ListaCompraRepository.get_by_id(db, lista_id)
 
         if not lista:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista no encontrada"
+                detail="Lista no encontrada",
             )
 
-        if lista.usuario_id != current_user.id_usuario:
+        if not ProductoListaService._usuario_tiene_acceso(db, lista, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para acceder a esta lista"
+                detail="No tienes permiso para acceder a esta lista",
             )
+
+        ProductoListaService._validar_lista_no_finalizada(db, lista_id)
 
         return ProductoListaRepository.get_by_lista_id(db, lista_id)
 
     @staticmethod
     def get_producto_by_id(
         db: Session,
-        producto_id: int,
-        current_user: User
+        producto_lista_id: int,
+        current_user: User,
     ) -> ProductoLista:
-        producto = ProductoListaRepository.get_by_id(db, producto_id)
+        producto_lista = ProductoListaRepository.get_by_id(db, producto_lista_id)
 
-        if not producto:
+        if not producto_lista:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Producto no encontrado"
+                detail="Producto de lista no encontrado",
             )
 
-        lista = ListaCompraRepository.get_by_id(db, producto.lista_id)
+        lista = ListaCompraRepository.get_by_id(db, producto_lista.lista_id)
 
         if not lista:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista asociada no encontrada"
+                detail="Lista asociada no encontrada",
             )
 
-        if lista.usuario_id != current_user.id_usuario:
+        if not ProductoListaService._usuario_tiene_acceso(db, lista, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para acceder a este producto"
+                detail="No tienes permiso para acceder a este producto",
             )
 
-        return producto
+        ProductoListaService._validar_lista_no_finalizada(db, producto_lista.lista_id)
+
+        return producto_lista
+
+    @staticmethod
+    def _validar_permiso_modificacion_producto(
+        db: Session,
+        producto_lista: ProductoLista,
+        current_user: User,
+    ) -> None:
+        lista = ListaCompraRepository.get_by_id(db, producto_lista.lista_id)
+
+        if not lista:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista asociada no encontrada",
+            )
+
+        if not ProductoListaService._usuario_puede_modificar(db, lista, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para modificar esta lista",
+            )
+
+    @staticmethod
+    def update_producto(
+        db: Session,
+        producto_lista_id: int,
+        producto_data: ProductoListaUpdate,
+        current_user: User,
+    ) -> ProductoLista:
+        producto_lista = ProductoListaService.get_producto_by_id(
+            db,
+            producto_lista_id,
+            current_user,
+        )
+
+        ProductoListaService._validar_permiso_modificacion_producto(
+            db,
+            producto_lista,
+            current_user,
+        )
+
+        if producto_data.cantidad is not None:
+            producto_catalogo = ProductoRepository.get_by_id(
+                db,
+                producto_lista.producto_id,
+            )
+
+            if not producto_catalogo:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Producto de catálogo no encontrado",
+                )
+
+            producto_lista.cantidad = producto_data.cantidad
+            producto_lista.precio_estimado = (
+                producto_catalogo.precio_unitario * producto_data.cantidad
+            )
+
+        producto_actualizado = ProductoListaRepository.save(db, producto_lista)
+
+        ProductoListaService._recalcular_total_lista(db, producto_lista.lista_id)
+
+        return producto_actualizado
+
+    @staticmethod
+    def delete_producto(
+        db: Session,
+        producto_lista_id: int,
+        current_user: User,
+    ) -> None:
+        producto_lista = ProductoListaService.get_producto_by_id(
+            db,
+            producto_lista_id,
+            current_user,
+        )
+
+        ProductoListaService._validar_permiso_modificacion_producto(
+            db,
+            producto_lista,
+            current_user,
+        )
+
+        lista_id = producto_lista.lista_id
+
+        ProductoListaRepository.delete(db, producto_lista)
+
+        ProductoListaService._recalcular_total_lista(db, lista_id)

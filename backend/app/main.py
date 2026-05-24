@@ -8,7 +8,10 @@ from app.controllers.auth_controller import router as auth_router
 from app.controllers.user_controller import router as user_router
 from app.controllers.admin_controller import router as admin_router
 from app.controllers.lista_compra_controller import router as lista_router
+from app.controllers.lista_compartida_controller import router as lista_compartida_router
+from app.controllers.historial_listas_controller import router as historial_router
 from app.controllers.producto_lista_controller import router as producto_router
+from app.controllers.producto_controller import router as producto_catalogo_router
 
 
 app = FastAPI()
@@ -37,8 +40,11 @@ def on_startup():
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(admin_router)
+app.include_router(lista_compartida_router)
 app.include_router(lista_router)
+app.include_router(historial_router)
 app.include_router(producto_router)
+app.include_router(producto_catalogo_router)
 
 
 @app.get("/health")

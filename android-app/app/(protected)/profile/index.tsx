@@ -217,6 +217,26 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      <View style={styles.quickAccess}>
+        <Pressable style={styles.quickCard} onPress={() => router.push("/listas")}>
+          <Text style={styles.quickIcon}>🛒</Text>
+          <View style={styles.quickTextBox}>
+            <Text style={styles.quickTitle}>Mis listas</Text>
+            <Text style={styles.quickSubtitle}>Crear y gestionar compras</Text>
+          </View>
+          <Text style={styles.quickArrow}>›</Text>
+        </Pressable>
+
+        <Pressable style={styles.quickCard} onPress={() => router.push("/productos")}>
+          <Text style={styles.quickIcon}>🏷️</Text>
+          <View style={styles.quickTextBox}>
+            <Text style={styles.quickTitle}>Catálogo</Text>
+            <Text style={styles.quickSubtitle}>Buscar productos y precios</Text>
+          </View>
+          <Text style={styles.quickArrow}>›</Text>
+        </Pressable>
+      </View>
+
       <View style={styles.card}>
         <Text style={styles.label}>Nombre completo:</Text>
         <View style={styles.rowField}>
@@ -418,6 +438,43 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: Colors.white,
+  },
+  quickAccess: {
+    gap: 10,
+    marginBottom: 18,
+  },
+  quickCard: {
+    minHeight: 74,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  quickIcon: {
+    fontSize: 24,
+  },
+  quickTextBox: {
+    flex: 1,
+  },
+  quickTitle: {
+    color: Colors.title,
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 2,
+  },
+  quickSubtitle: {
+    color: Colors.textMuted,
+    fontSize: 13,
+  },
+  quickArrow: {
+    color: Colors.textMuted,
+    fontSize: 28,
+    fontWeight: "700",
   },
   card: {
     backgroundColor: "rgba(255,255,255,0.88)",

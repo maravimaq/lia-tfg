@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str
     access_token_expire_minutes: int
-    google_web_client_id: str
+    google_web_client_id: str | None = None
     scraping_sources_json: str | None = None
     scraping_user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
