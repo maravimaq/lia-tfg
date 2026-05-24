@@ -1,6 +1,9 @@
+from urllib.parse import quote
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.external_auth import verify_apple_id_token, verify_google_id_token
 from app.models.sesion_autenticacion import SesionAutenticacion
 from app.models.user import User
@@ -9,6 +12,7 @@ from app.repositories.session_repository import SessionRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import ExternalUserPayload
 from app.schemas.user import UserCreate
+from app.services.email_service import EmailService
 from app.core.security import (
     hash_password,
     verify_password,
@@ -253,10 +257,19 @@ class AuthService:
             )
 
         reset_token = create_password_reset_token(user.email)
+        separator = "&" if "?" in settings.password_reset_url else "?"
+        reset_url = f"{settings.password_reset_url}{separator}token={quote(reset_token)}"
+
+        try:
+            EmailService.send_password_reset_email(user.email, reset_url)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"No se pudo enviar el correo de recuperación: {str(exc)}"
+            ) from exc
 
         return {
-            "message": "Token de recuperación generado",
-            "reset_token": reset_token
+            "message": "Si el correo existe en el sistema, recibirás instrucciones para restablecer tu contraseña"
         }
 
     @staticmethod

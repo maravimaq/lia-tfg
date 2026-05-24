@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 import Screen from "@/src/components/Screen";
 import ProfileSideMenu from "@/src/components/ProfileSideMenu";
@@ -16,7 +16,6 @@ import AppInput from "@/src/components/AppInput";
 import AppButton from "@/src/components/AppButton";
 import { useAuth } from "@/src/hooks/useAuth";
 import { Colors } from "@/src/constants/colors";
-import { profileImageStorage } from "@/src/lib/profileImage";
 import { userService } from "@/src/services/user";
 import { DiscoverUserResponse, IncomingFollowRequestItem } from "@/src/types/user";
 
@@ -35,7 +34,7 @@ function getAvatarFallback(name?: string) {
 }
 
 export default function ProfileScreen() {
-  const { user, refreshProfile, signOut } = useAuth();
+  const { user, refreshProfile, signOut, setUser } = useAuth();
   const [menuVisible, setMenuVisible] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [users, setUsers] = useState<DiscoverUserResponse[]>([]);
@@ -63,13 +62,24 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     refreshProfile().catch(() => undefined);
-
-    profileImageStorage.get().then((uri) => {
-      if (uri) setImageUri(uri);
-    });
-
     loadFriendsData().catch(() => undefined);
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadFriendsData(search).catch(() => undefined);
+
+      const intervalId = setInterval(() => {
+        loadFriendsData(search).catch(() => undefined);
+      }, 10000);
+
+      return () => clearInterval(intervalId);
+    }, [search])
+  );
+
+  useEffect(() => {
+    setImageUri(user?.avatar_url ?? null);
+  }, [user?.avatar_url]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -96,13 +106,30 @@ export default function ProfileScreen() {
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.55,
+      base64: true,
     });
 
     if (!result.canceled && result.assets?.length > 0) {
-      const uri = result.assets[0].uri;
-      setImageUri(uri);
-      await profileImageStorage.set(uri);
+      const asset = result.assets[0];
+
+      if (!asset.base64) {
+        Alert.alert("Error", "No se pudo leer la imagen seleccionada.");
+        return;
+      }
+
+      const mimeType = asset.mimeType || "image/jpeg";
+      const avatarDataUri = `data:${mimeType};base64,${asset.base64}`;
+
+      try {
+        setImageUri(avatarDataUri);
+        const updatedUser = await userService.updateMe({ avatar_url: avatarDataUri });
+        setUser(updatedUser);
+        await loadFriendsData(search);
+      } catch (error: any) {
+        setImageUri(user?.avatar_url ?? null);
+        Alert.alert("Error", error?.response?.data?.detail || "No se pudo guardar la imagen de perfil");
+      }
     }
   };
 
@@ -113,6 +140,16 @@ export default function ProfileScreen() {
     } catch (error) {
       console.log("Error al cerrar sesión:", error);
       router.replace("/(auth)/sign-in");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      await userService.requestAccountAction({ tipo: "eliminacion" });
+      await signOut();
+      router.replace("/(auth)/sign-in");
+    } catch (error: any) {
+      Alert.alert("Error", error?.response?.data?.detail || "No se pudo solicitar la eliminación de la cuenta");
     }
   };
 
@@ -310,6 +347,7 @@ export default function ProfileScreen() {
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         onLogout={handleLogout}
+        onDeleteAccount={handleDeleteAccount}
         isAdmin={user?.rol_id === 2}
       />
     </Screen>

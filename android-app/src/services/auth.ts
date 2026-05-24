@@ -1,6 +1,8 @@
 import { api } from "./api";
 import {
   ForgotPasswordPayload,
+  ForgotPasswordResponse,
+  ResetPasswordPayload,
   LoginPayload,
   RegisterPayload,
   TokenResponse,
@@ -19,12 +21,21 @@ export const authService = {
   },
 
   async forgotPassword(payload: ForgotPasswordPayload) {
-    const { data } = await api.post("/auth/forgot-password", payload);
+    const { data } = await api.post<ForgotPasswordResponse>("/auth/forgot-password", payload);
     return data;
   },
 
-  async logout() {
-    const { data } = await api.post("/auth/logout");
+  async resetPassword(payload: ResetPasswordPayload) {
+    const { data } = await api.post("/auth/reset-password", payload);
+    return data;
+  },
+
+  async logout(token?: string | null) {
+    const { data } = await api.post(
+      "/auth/logout",
+      undefined,
+      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+    );
     return data;
   },
 };

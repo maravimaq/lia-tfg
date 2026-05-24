@@ -32,6 +32,16 @@ export type AdminDashboardLatestList = {
   usuario_id: number;
 };
 
+export type AdminPendingDeletionRequest = {
+  id_solicitud: number;
+  usuario_id: number;
+  nombre_usuario: string;
+  nombre_completo: string;
+  email: string;
+  fecha_solicitud: string;
+  motivo?: string | null;
+};
+
 export type AdminDashboardResponse = {
   total_usuarios: number;
   total_usuarios_activos: number;
@@ -40,6 +50,7 @@ export type AdminDashboardResponse = {
   ultimo_usuario_registrado?: AdminDashboardLatestUser | null;
   ultima_lista_creada?: AdminDashboardLatestList | null;
   actividad_reciente: string[];
+  solicitudes_eliminacion_pendientes: AdminPendingDeletionRequest[];
 };
 
 export type AdminUserCreatePayload = {

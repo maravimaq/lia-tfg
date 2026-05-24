@@ -1,30 +1,30 @@
-from app.db.session import SessionLocal
-
-from app.models.role import Role
-from app.models.user import User
-from app.models.preferencias_usuario import PreferenciasUsuario
-from app.models.configuracion_bot_externo import ConfiguracionBotExterno
-from app.models.sesion_autenticacion import SesionAutenticacion
-from app.models.solicitud_baja_usuario import SolicitudBajaUsuario
-from app.models.lista_compra import ListaCompra
-from app.models.producto_lista import ProductoLista
-from app.models.solicitud_seguimiento import SolicitudSeguimiento
-from app.models.seguimiento_usuario import SeguimientoUsuario
-from app.db.session import SessionLocal, engine
-from app.db.base import Base
+from datetime import datetime
+from decimal import Decimal
 
 from app.core.security import hash_password
+from app.db.base import Base
+from app.db.session import SessionLocal, engine
+from app.models.configuracion_bot_externo import ConfiguracionBotExterno
+from app.models.lista_compra import ListaCompra
+from app.models.preferencias_usuario import PreferenciasUsuario
+from app.models.producto_lista import ProductoLista
+from app.models.role import Role
+from app.models.seguimiento_usuario import SeguimientoUsuario
+from app.models.sesion_autenticacion import SesionAutenticacion
+from app.models.solicitud_baja_usuario import SolicitudBajaUsuario
+from app.models.solicitud_seguimiento import SolicitudSeguimiento
+from app.models.user import User
 
 
 def seed_roles(db):
     roles_data = [
         {
             "nombre": "usuario",
-            "descripcion": "Usuario estándar de la aplicación"
+            "descripcion": "Usuario estándar de la aplicación",
         },
         {
             "nombre": "administrador",
-            "descripcion": "Administrador del sistema"
+            "descripcion": "Administrador del sistema",
         },
     ]
 
@@ -36,18 +36,99 @@ def seed_roles(db):
         if not role:
             role = Role(
                 nombre=role_data["nombre"],
-                descripcion=role_data["descripcion"]
+                descripcion=role_data["descripcion"],
             )
             db.add(role)
             db.commit()
             db.refresh(role)
             print(f"Rol creado: {role.nombre}")
         else:
+            role.descripcion = role_data["descripcion"]
+            db.add(role)
+            db.commit()
+            db.refresh(role)
             print(f"Rol ya existe: {role.nombre}")
 
         roles[role.nombre] = role
 
     return roles
+
+
+def upsert_preferences(db, user, preferencias_data):
+    preferencias = (
+        db.query(PreferenciasUsuario)
+        .filter(PreferenciasUsuario.usuario_id == user.id_usuario)
+        .first()
+    )
+
+    if not preferencias:
+        preferencias = PreferenciasUsuario(usuario_id=user.id_usuario)
+
+    preferencias.idioma = preferencias_data["idioma"]
+    preferencias.modo_oscuro = preferencias_data["modo_oscuro"]
+    preferencias.notificaciones = preferencias_data["notificaciones"]
+    preferencias.unidad_peso = preferencias_data["unidad_peso"]
+    preferencias.unidad_precio = preferencias_data["unidad_precio"]
+    preferencias.supermercado_favorito = preferencias_data["supermercado_favorito"]
+
+    db.add(preferencias)
+    db.commit()
+    db.refresh(preferencias)
+
+    return preferencias
+
+
+def upsert_bot_config(db, user, configuracion_data):
+    config_bot = (
+        db.query(ConfiguracionBotExterno)
+        .filter(ConfiguracionBotExterno.usuario_id == user.id_usuario)
+        .first()
+    )
+
+    if not config_bot:
+        config_bot = ConfiguracionBotExterno(usuario_id=user.id_usuario)
+
+    config_bot.plataforma = configuracion_data["plataforma"]
+    config_bot.token = configuracion_data["token"]
+    config_bot.estado = configuracion_data["estado"]
+
+    db.add(config_bot)
+    db.commit()
+    db.refresh(config_bot)
+
+    return config_bot
+
+
+def seed_user_session(db, user):
+    token = f"seed-token-{user.id_usuario}"
+    sesion = (
+        db.query(SesionAutenticacion)
+        .filter(SesionAutenticacion.token == token)
+        .first()
+    )
+
+    session_status = "activa" if user.estado == "activo" else "revocada"
+    session_end = None if session_status == "activa" else datetime.utcnow()
+
+    if not sesion:
+        sesion = SesionAutenticacion(
+            proveedor=user.proveedor_auth or "local",
+            token=token,
+            estado=session_status,
+            fecha_fin=session_end,
+            usuario_id=user.id_usuario,
+        )
+    else:
+        sesion.proveedor = user.proveedor_auth or "local"
+        sesion.estado = session_status
+        sesion.fecha_fin = session_end
+        sesion.usuario_id = user.id_usuario
+
+    db.add(sesion)
+    db.commit()
+    db.refresh(sesion)
+
+    return sesion
 
 
 def seed_users(db, roles):
@@ -68,13 +149,13 @@ def seed_users(db, roles):
                 "notificaciones": True,
                 "unidad_peso": "kg",
                 "unidad_precio": "EUR",
-                "supermercado_favorito": "Mercadona"
+                "supermercado_favorito": "Mercadona",
             },
             "configuracion_bot": {
                 "plataforma": "telegram",
                 "token": None,
-                "estado": "inactivo"
-            }
+                "estado": "inactivo",
+            },
         },
         {
             "nombre_usuario": "usuario1",
@@ -92,13 +173,13 @@ def seed_users(db, roles):
                 "notificaciones": True,
                 "unidad_peso": "kg",
                 "unidad_precio": "EUR",
-                "supermercado_favorito": "Lidl"
+                "supermercado_favorito": "Lidl",
             },
             "configuracion_bot": {
                 "plataforma": "telegram",
                 "token": None,
-                "estado": "inactivo"
-            }
+                "estado": "inactivo",
+            },
         },
         {
             "nombre_usuario": "usuario2",
@@ -116,13 +197,13 @@ def seed_users(db, roles):
                 "notificaciones": False,
                 "unidad_peso": "kg",
                 "unidad_precio": "EUR",
-                "supermercado_favorito": "Carrefour"
+                "supermercado_favorito": "Carrefour",
             },
             "configuracion_bot": {
                 "plataforma": "telegram",
                 "token": None,
-                "estado": "inactivo"
-            }
+                "estado": "inactivo",
+            },
         },
         {
             "nombre_usuario": "usuario3",
@@ -140,76 +221,79 @@ def seed_users(db, roles):
                 "notificaciones": True,
                 "unidad_peso": "lb",
                 "unidad_precio": "USD",
-                "supermercado_favorito": "Costco"
+                "supermercado_favorito": "Costco",
             },
             "configuracion_bot": {
                 "plataforma": "telegram",
                 "token": "token-prueba-usuario3",
-                "estado": "activo"
-            }
-        }
+                "estado": "activo",
+            },
+        },
+        {
+            "nombre_usuario": "usuario_baja",
+            "nombre_completo": "Usuario Pendiente Baja",
+            "email": "usuario_baja@lia.com",
+            "contrasena": "usuario1234",
+            "telefono": "644444444",
+            "avatar_url": "https://i.pravatar.cc/300?img=56",
+            "estado": "inactivo",
+            "proveedor_auth": "local",
+            "rol_id": roles["usuario"].id_rol,
+            "preferencias": {
+                "idioma": "es",
+                "modo_oscuro": False,
+                "notificaciones": True,
+                "unidad_peso": "kg",
+                "unidad_precio": "EUR",
+                "supermercado_favorito": "DIA",
+            },
+            "configuracion_bot": {
+                "plataforma": "telegram",
+                "token": None,
+                "estado": "inactivo",
+            },
+        },
     ]
 
     created_or_existing_users = {}
 
     for user_data in users_data:
-        existing_user = db.query(User).filter(User.email == user_data["email"]).first()
+        user = db.query(User).filter(User.email == user_data["email"]).first()
 
-        if existing_user:
-            existing_user.avatar_url = user_data["avatar_url"]
-            db.add(existing_user)
+        if not user:
+            user = User(
+                nombre_usuario=user_data["nombre_usuario"],
+                nombre_completo=user_data["nombre_completo"],
+                email=user_data["email"],
+                contrasena=hash_password(user_data["contrasena"]),
+                telefono=user_data["telefono"],
+                avatar_url=user_data["avatar_url"],
+                estado=user_data["estado"],
+                proveedor_auth=user_data["proveedor_auth"],
+                rol_id=user_data["rol_id"],
+            )
+            db.add(user)
             db.commit()
-            created_or_existing_users[existing_user.nombre_usuario] = existing_user
-            print(f"Usuario ya existe: {existing_user.email}")
-            continue
+            db.refresh(user)
+            print(f"Usuario creado: {user.email}")
+        else:
+            user.nombre_usuario = user_data["nombre_usuario"]
+            user.nombre_completo = user_data["nombre_completo"]
+            user.telefono = user_data["telefono"]
+            user.avatar_url = user_data["avatar_url"]
+            user.estado = user_data["estado"]
+            user.proveedor_auth = user_data["proveedor_auth"]
+            user.rol_id = user_data["rol_id"]
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            print(f"Usuario ya existe y se actualizó: {user.email}")
 
-        new_user = User(
-            nombre_usuario=user_data["nombre_usuario"],
-            nombre_completo=user_data["nombre_completo"],
-            email=user_data["email"],
-            contrasena=hash_password(user_data["contrasena"]),
-            telefono=user_data["telefono"],
-            avatar_url=user_data["avatar_url"],
-            estado=user_data["estado"],
-            proveedor_auth=user_data["proveedor_auth"],
-            rol_id=user_data["rol_id"],
-        )
+        upsert_preferences(db, user, user_data["preferencias"])
+        upsert_bot_config(db, user, user_data["configuracion_bot"])
+        seed_user_session(db, user)
 
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-
-        preferencias = PreferenciasUsuario(
-            idioma=user_data["preferencias"]["idioma"],
-            modo_oscuro=user_data["preferencias"]["modo_oscuro"],
-            notificaciones=user_data["preferencias"]["notificaciones"],
-            unidad_peso=user_data["preferencias"]["unidad_peso"],
-            unidad_precio=user_data["preferencias"]["unidad_precio"],
-            supermercado_favorito=user_data["preferencias"]["supermercado_favorito"],
-            usuario_id=new_user.id_usuario
-        )
-        db.add(preferencias)
-
-        config_bot = ConfiguracionBotExterno(
-            plataforma=user_data["configuracion_bot"]["plataforma"],
-            token=user_data["configuracion_bot"]["token"],
-            estado=user_data["configuracion_bot"]["estado"],
-            usuario_id=new_user.id_usuario
-        )
-        db.add(config_bot)
-
-        sesion = SesionAutenticacion(
-            proveedor="local",
-            token=f"seed-token-{new_user.id_usuario}",
-            estado="activa",
-            usuario_id=new_user.id_usuario
-        )
-        db.add(sesion)
-
-        db.commit()
-
-        created_or_existing_users[new_user.nombre_usuario] = new_user
-        print(f"Usuario creado: {new_user.email}")
+        created_or_existing_users[user.nombre_usuario] = user
 
     return created_or_existing_users
 
@@ -218,6 +302,7 @@ def seed_follow_data(db, users):
     pairs_follow = [
         ("usuario1", "usuario2"),
         ("usuario1", "usuario3"),
+        ("usuario2", "usuario1"),
     ]
 
     for seguidor_username, seguido_username in pairs_follow:
@@ -260,7 +345,6 @@ def seed_follow_data(db, users):
             .filter(
                 SolicitudSeguimiento.solicitante_id == solicitante.id_usuario,
                 SolicitudSeguimiento.destinatario_id == destinatario.id_usuario,
-                SolicitudSeguimiento.estado == "pendiente",
             )
             .first()
         )
@@ -273,9 +357,187 @@ def seed_follow_data(db, users):
                     estado="pendiente",
                 )
             )
+        else:
+            existing_request.estado = "pendiente"
+            db.add(existing_request)
 
     db.commit()
     print("Relaciones y solicitudes de seguimiento insertadas/actualizadas.")
+
+
+def seed_account_requests(db, users):
+    requests_data = [
+        {
+            "usuario": "usuario_baja",
+            "tipo": "eliminacion",
+            "motivo": "Solicitud seed para probar la notificación preferente del dashboard admin.",
+            "estado": "pendiente",
+        },
+        {
+            "usuario": "usuario3",
+            "tipo": "desactivacion",
+            "motivo": "Ejemplo seed de solicitud histórica rechazada.",
+            "estado": "rechazada",
+        },
+    ]
+
+    for request_data in requests_data:
+        user = users.get(request_data["usuario"])
+
+        if not user:
+            continue
+
+        existing_request = (
+            db.query(SolicitudBajaUsuario)
+            .filter(
+                SolicitudBajaUsuario.usuario_id == user.id_usuario,
+                SolicitudBajaUsuario.tipo == request_data["tipo"],
+                SolicitudBajaUsuario.estado == request_data["estado"],
+            )
+            .first()
+        )
+
+        if not existing_request:
+            existing_request = SolicitudBajaUsuario(
+                usuario_id=user.id_usuario,
+                tipo=request_data["tipo"],
+                motivo=request_data["motivo"],
+                estado=request_data["estado"],
+            )
+        else:
+            existing_request.motivo = request_data["motivo"]
+
+        db.add(existing_request)
+
+        if request_data["tipo"] == "eliminacion" and request_data["estado"] == "pendiente":
+            user.estado = "inactivo"
+            db.add(user)
+            active_sessions = (
+                db.query(SesionAutenticacion)
+                .filter(
+                    SesionAutenticacion.usuario_id == user.id_usuario,
+                    SesionAutenticacion.estado == "activa",
+                )
+                .all()
+            )
+            for session in active_sessions:
+                session.estado = "revocada"
+                session.fecha_fin = datetime.utcnow()
+                db.add(session)
+
+    db.commit()
+    print("Solicitudes de baja/eliminación insertadas/actualizadas.")
+
+
+def seed_shopping_lists(db, users):
+    lists_data = [
+        {
+            "usuario": "usuario1",
+            "nombre_lista": "Compra semanal",
+            "compartida": True,
+            "total_estimado": Decimal("18.25"),
+            "productos": [
+                {
+                    "nombre_producto": "Leche",
+                    "cantidad": 2,
+                    "unidad_medida": "L",
+                    "supermercado": "Mercadona",
+                    "precio_estimado": Decimal("1.10"),
+                },
+                {
+                    "nombre_producto": "Pan integral",
+                    "cantidad": 1,
+                    "unidad_medida": "ud",
+                    "supermercado": "Carrefour",
+                    "precio_estimado": Decimal("1.45"),
+                },
+                {
+                    "nombre_producto": "Manzanas",
+                    "cantidad": 2,
+                    "unidad_medida": "kg",
+                    "supermercado": "Lidl",
+                    "precio_estimado": Decimal("2.30"),
+                },
+            ],
+        },
+        {
+            "usuario": "usuario2",
+            "nombre_lista": "Cena amigos",
+            "compartida": False,
+            "total_estimado": Decimal("27.80"),
+            "productos": [
+                {
+                    "nombre_producto": "Pasta",
+                    "cantidad": 3,
+                    "unidad_medida": "paquetes",
+                    "supermercado": "DIA",
+                    "precio_estimado": Decimal("1.25"),
+                },
+                {
+                    "nombre_producto": "Tomate frito",
+                    "cantidad": 2,
+                    "unidad_medida": "botes",
+                    "supermercado": "Mercadona",
+                    "precio_estimado": Decimal("1.60"),
+                },
+            ],
+        },
+    ]
+
+    for list_data in lists_data:
+        user = users.get(list_data["usuario"])
+
+        if not user:
+            continue
+
+        lista = (
+            db.query(ListaCompra)
+            .filter(
+                ListaCompra.usuario_id == user.id_usuario,
+                ListaCompra.nombre_lista == list_data["nombre_lista"],
+            )
+            .first()
+        )
+
+        if not lista:
+            lista = ListaCompra(
+                nombre_lista=list_data["nombre_lista"],
+                compartida=list_data["compartida"],
+                total_estimado=list_data["total_estimado"],
+                usuario_id=user.id_usuario,
+            )
+        else:
+            lista.compartida = list_data["compartida"]
+            lista.total_estimado = list_data["total_estimado"]
+
+        db.add(lista)
+        db.commit()
+        db.refresh(lista)
+
+        for product_data in list_data["productos"]:
+            producto = (
+                db.query(ProductoLista)
+                .filter(
+                    ProductoLista.lista_id == lista.id_lista,
+                    ProductoLista.nombre_producto == product_data["nombre_producto"],
+                )
+                .first()
+            )
+
+            if not producto:
+                producto = ProductoLista(
+                    nombre_producto=product_data["nombre_producto"],
+                    lista_id=lista.id_lista,
+                )
+
+            producto.cantidad = product_data["cantidad"]
+            producto.unidad_medida = product_data["unidad_medida"]
+            producto.supermercado = product_data["supermercado"]
+            producto.precio_estimado = product_data["precio_estimado"]
+            db.add(producto)
+
+    db.commit()
+    print("Listas de compra y productos insertados/actualizados.")
 
 
 def run_seed():
@@ -290,6 +552,12 @@ def run_seed():
 
         print("Insertando datos de amigos/seguimientos...")
         seed_follow_data(db, users)
+
+        print("Insertando solicitudes de baja/eliminación...")
+        seed_account_requests(db, users)
+
+        print("Insertando listas y productos de prueba...")
+        seed_shopping_lists(db, users)
 
         print("Seed completado correctamente.")
     except Exception as e:

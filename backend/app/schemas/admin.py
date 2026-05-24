@@ -63,6 +63,16 @@ class AdminDashboardLatestList(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AdminPendingDeletionRequest(BaseModel):
+    id_solicitud: int
+    usuario_id: int
+    nombre_usuario: str
+    nombre_completo: str
+    email: EmailStr
+    fecha_solicitud: datetime
+    motivo: Optional[str] = None
+
+
 class AdminDashboardResponse(BaseModel):
     total_usuarios: int
     total_usuarios_activos: int
@@ -71,6 +81,7 @@ class AdminDashboardResponse(BaseModel):
     ultimo_usuario_registrado: Optional[AdminDashboardLatestUser] = None
     ultima_lista_creada: Optional[AdminDashboardLatestList] = None
     actividad_reciente: list[str] = []
+    solicitudes_eliminacion_pendientes: list[AdminPendingDeletionRequest] = []
 
 
 class AdminScrapingStoreStatus(BaseModel):

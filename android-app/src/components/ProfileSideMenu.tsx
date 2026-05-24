@@ -1,6 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -10,12 +9,14 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
+import AppButton from "@/src/components/AppButton";
 import { Colors } from "@/src/constants/colors";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
+  onDeleteAccount?: () => void | Promise<void>;
   isAdmin?: boolean;
 };
 
@@ -24,11 +25,25 @@ type MenuItemProps = {
   label: string;
   onPress: () => void;
   danger?: boolean;
+  disabled?: boolean;
 };
 
-function MenuItem({ icon, label, onPress, danger = false }: MenuItemProps) {
+type ConfirmationAction = "logout" | "delete" | null;
+
+function MenuItem({
+  icon,
+  label,
+  onPress,
+  danger = false,
+  disabled = false,
+}: MenuItemProps) {
   return (
-    <Pressable style={styles.item} onPress={onPress}>
+    <Pressable
+      style={[styles.item, disabled && styles.disabledItem]}
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={8}
+    >
       <View style={styles.iconBox}>
         <Text style={[styles.icon, danger && styles.dangerText]}>{icon}</Text>
       </View>
@@ -44,41 +59,90 @@ export default function ProfileSideMenu({
   visible,
   onClose,
   onLogout,
+  onDeleteAccount,
   isAdmin = false,
 }: Props) {
+  const [confirmationAction, setConfirmationAction] =
+    useState<ConfirmationAction>(null);
+  const [processing, setProcessing] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setConfirmationAction(null);
+      setProcessing(false);
+    }
+  }, [visible]);
+
+  const closeMenu = () => {
+    if (processing) return;
+    setConfirmationAction(null);
+    onClose();
+  };
+
   const goTo = (path: string) => {
     onClose();
     router.push(path as never);
   };
 
-  const showComingSoon = (sectionName: string) => {
-    onClose();
+  const handleConfirmedAction = async () => {
+    if (!confirmationAction || processing) return;
 
-    Alert.alert(
-      "Próximamente",
-      `${sectionName} se implementará más adelante.`
-    );
+    try {
+      setProcessing(true);
+
+      const actionToRun = confirmationAction;
+      setConfirmationAction(null);
+      onClose();
+
+      if (actionToRun === "logout") {
+        await onLogout();
+        return;
+      }
+
+      if (onDeleteAccount) {
+        await onDeleteAccount();
+        return;
+      }
+
+      router.push("/(protected)/profile/account-action" as never);
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  const confirmLogout = () => {
-    Alert.alert("Cerrar sesión", "¿Estás seguro de que quieres cerrar sesión?", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Cerrar sesión",
-        style: "destructive",
-        onPress: () => {
-          onClose();
-          onLogout();
-        },
-      },
-    ]);
-  };
+  const renderConfirmation = () => {
+    const isLogout = confirmationAction === "logout";
 
-  const confirmDelete = () => {
-    Alert.alert(
-      "Eliminar cuenta",
-      "Esta sección se implementará más adelante.",
-      [{ text: "Aceptar" }]
+    return (
+      <View style={styles.confirmationBox}>
+        <Text style={styles.confirmationTitle}>
+          {isLogout ? "Cerrar sesión" : "Eliminar cuenta"}
+        </Text>
+
+        <Text style={styles.confirmationText}>
+          {isLogout
+            ? "¿Estás seguro de que quieres cerrar sesión?"
+            : "¿Estás seguro de que quieres eliminar tu cuenta? Se cerrará tu sesión, la cuenta quedará inactiva y el administrador recibirá la solicitud."}
+        </Text>
+
+        <View style={styles.confirmationActions}>
+          <AppButton
+            title="Cancelar"
+            variant="ghost"
+            onPress={() => setConfirmationAction(null)}
+            disabled={processing}
+            style={styles.confirmationButton}
+          />
+
+          <AppButton
+            title={isLogout ? "Cerrar sesión" : "Eliminar cuenta"}
+            variant="danger"
+            onPress={handleConfirmedAction}
+            loading={processing}
+            style={styles.confirmationButton}
+          />
+        </View>
+      </View>
     );
   };
 
@@ -86,109 +150,124 @@ export default function ProfileSideMenu({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
-      onRequestClose={onClose}
+      animationType="slide"
+      onRequestClose={closeMenu}
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable
+          style={styles.backdrop}
+          onPress={closeMenu}
+          disabled={processing}
+        />
 
         <View style={styles.panel}>
           <View style={styles.closeRow}>
-            <Pressable style={styles.closeButton} onPress={onClose}>
+            <Pressable
+              style={styles.closeButton}
+              onPress={closeMenu}
+              disabled={processing}
+              hitSlop={8}
+            >
               <Text style={styles.close}>×</Text>
             </Pressable>
           </View>
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            <MenuItem
-              icon="⚙"
-              label="Configuración Bot Externo"
-              onPress={() => showComingSoon("Configuración Bot Externo")}
-            />
+          {confirmationAction ? (
+            renderConfirmation()
+          ) : (
+            <>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+              >
+                <MenuItem
+                  icon="⚙"
+                  label="Configuración Bot Externo"
+                  onPress={() => goTo("/(protected)/profile/bot-config")}
+                />
 
-            <MenuItem
-              icon="?"
-              label="FAQ"
-              onPress={() => showComingSoon("FAQ")}
-            />
+                <MenuItem
+                  icon="?"
+                  label="FAQ"
+                  onPress={() => goTo("/(protected)/profile/faq")}
+                />
 
-            <MenuItem
-              icon="i"
-              label="Sobre LIA"
-              onPress={() => showComingSoon("Sobre LIA")}
-            />
+                <MenuItem
+                  icon="i"
+                  label="Sobre LIA"
+                  onPress={() => goTo("/(protected)/profile/about")}
+                />
 
-            <MenuItem
-              icon="○"
-              label="Ayuda y Soporte"
-              onPress={() => showComingSoon("Ayuda y Soporte")}
-            />
+                <MenuItem
+                  icon="○"
+                  label="Ayuda y Soporte"
+                  onPress={() => goTo("/(protected)/profile/support")}
+                />
 
-            <MenuItem
-              icon="✉"
-              label="Información de Contacto"
-              onPress={() => showComingSoon("Información de Contacto")}
-            />
+                <MenuItem
+                  icon="✉"
+                  label="Información de Contacto"
+                  onPress={() => goTo("/(protected)/profile/contact-info")}
+                />
 
-            <View style={styles.separator} />
+                <View style={styles.separator} />
 
-            <MenuItem
-              icon="☷"
-              label="Mis Listas Pendientes"
-              onPress={() => goTo("/listas")}
-            />
+                <MenuItem
+                  icon="☷"
+                  label="Mis Listas Pendientes"
+                  onPress={() => goTo("/listas")}
+                />
 
-            <MenuItem
-              icon="☷"
-              label="Historial de Listas"
-              onPress={() => goTo("/historial")}
-            />
+                <MenuItem
+                  icon="☷"
+                  label="Historial de Listas"
+                  onPress={() => goTo("/historial")}
+                />
 
-            <MenuItem
-              icon="%"
-              label="Comparador Precios"
-              onPress={() => goTo("/productos/comparar")}
-            />
+                <MenuItem
+                  icon="%"
+                  label="Comparador Precios"
+                  onPress={() => goTo("/productos/comparar")}
+                />
 
-            {isAdmin ? (
-              <MenuItem
-                icon="▦"
-                label="Panel Admin"
-                onPress={() => goTo("/admin")}
-              />
-            ) : null}
+                {isAdmin ? (
+                  <MenuItem
+                    icon="▦"
+                    label="Panel Admin"
+                    onPress={() => goTo("/(protected)/admin")}
+                  />
+                ) : null}
 
-            <MenuItem
-              icon="◉"
-              label="Mi perfil"
-              onPress={() => goTo("/profile")}
-            />
+                <MenuItem
+                  icon="◉"
+                  label="Mi perfil"
+                  onPress={() => goTo("/(protected)/profile")}
+                />
 
-            <View style={styles.separator} />
+                <View style={styles.separator} />
 
-            <MenuItem
-              icon="↪"
-              label="Cerrar Sesión"
-              onPress={confirmLogout}
-              danger
-            />
+                <MenuItem
+                  icon="↪"
+                  label="Cerrar Sesión"
+                  onPress={() => setConfirmationAction("logout")}
+                  danger
+                />
 
-            <View style={styles.smallSeparator} />
+                <View style={styles.smallSeparator} />
 
-            <MenuItem
-              icon="▢"
-              label="Eliminar Cuenta"
-              onPress={confirmDelete}
-              danger
-            />
-          </ScrollView>
+                <MenuItem
+                  icon="▢"
+                  label="Eliminar Cuenta"
+                  onPress={() => setConfirmationAction("delete")}
+                  danger
+                />
+              </ScrollView>
 
-          <View style={styles.footerBox}>
-            <Text style={styles.footer}>© 2025-2026 LIA</Text>
-          </View>
+              <View style={styles.footerBox}>
+                <Text style={styles.footer}>© 2025-2026 LIA</Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -255,6 +334,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
+  disabledItem: {
+    opacity: 0.5,
+  },
   itemText: {
     flex: 1,
     color: "#2D2D2D",
@@ -286,6 +368,32 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 14,
     paddingHorizontal: 12,
+  },
+  confirmationBox: {
+    margin: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+    padding: 14,
+  },
+  confirmationTitle: {
+    color: Colors.title,
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  confirmationText: {
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  confirmationActions: {
+    gap: 8,
+  },
+  confirmationButton: {
+    minHeight: 46,
   },
   footer: {
     color: "#777777",
