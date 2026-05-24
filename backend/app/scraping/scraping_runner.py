@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.scraping.base import DEFAULT_USER_AGENT, ScraperRunResult
 from app.scraping.catalog_importer import CatalogImporter, CatalogImportResult
 from app.scraping.dia_scraper import DiaScraper
+from app.scraping.mercadona_scraper import MercadonaScraper
 
 logger = logging.getLogger(__name__)
 
@@ -109,13 +110,18 @@ class ScrapingRunner:
         dia_cookie: Optional[str] = None,
         dia_max_categories: int = 20,
         dia_max_pages_per_category: int = 3,
+        mercadona_max_categories: int = 40,
     ) -> None:
         self.db = db
         self.timeout_seconds = timeout_seconds
         self.user_agent = user_agent
+
         self.dia_cookie = dia_cookie
         self.dia_max_categories = dia_max_categories
         self.dia_max_pages_per_category = dia_max_pages_per_category
+
+        self.mercadona_max_categories = mercadona_max_categories
+
         self.importer = CatalogImporter(db)
 
     async def run(
@@ -131,6 +137,11 @@ class ScrapingRunner:
         if "DIA" in selected:
             source_results.append(
                 await self._run_dia(commit=commit)
+            )
+
+        if "MERCADONA" in selected:
+            source_results.append(
+                await self._run_mercadona(commit=commit)
             )
 
         summary = self._build_summary(source_results)
@@ -155,6 +166,23 @@ class ScrapingRunner:
             cookie=self.dia_cookie,
             max_categories=self.dia_max_categories,
             max_pages_per_category=self.dia_max_pages_per_category,
+        )
+
+        try:
+            scraper_result = await scraper.scrape()
+        finally:
+            await scraper.close()
+
+        return self._import_scraper_result(
+            scraper_result,
+            commit=commit,
+        )
+
+    async def _run_mercadona(self, *, commit: bool) -> SourceExecutionResult:
+        scraper = MercadonaScraper(
+            timeout_seconds=self.timeout_seconds,
+            user_agent=self.user_agent,
+            max_categories=self.mercadona_max_categories,
         )
 
         try:
@@ -262,7 +290,7 @@ class ScrapingRunner:
     @staticmethod
     def _normalize_supermarkets(supermarkets: Optional[list[str]]) -> set[str]:
         if not supermarkets:
-            return {"DIA"}
+            return {"DIA", "MERCADONA"}
 
         return {
             supermarket.strip().upper()

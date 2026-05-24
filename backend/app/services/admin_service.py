@@ -152,15 +152,22 @@ class AdminService:
         """
         Fuentes activas por defecto para el nuevo sistema de scraping.
 
-        De momento dejamos solo DIA activado porque es la primera fuente
-        migrada al nuevo runner. Mercadona, Lidl y Carrefour se añadirán
-        cuando tengan scraper propio fiable.
+        DIA y Mercadona ya usan scrapers estructurados.
+        Lidl y Carrefour se añadirán cuando tengan una extracción fiable.
         """
 
         return [
             {
                 "supermercado": "DIA",
                 "urls": ["https://www.dia.es"],
+                "crawl_internal_links": False,
+                "link_include_regex": None,
+                "selector": None,
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
+            },
+            {
+                "supermercado": "Mercadona",
+                "urls": ["https://tienda.mercadona.es"],
                 "crawl_internal_links": False,
                 "link_include_regex": None,
                 "selector": None,
@@ -1077,7 +1084,7 @@ class AdminService:
                     source["productos_actualizados"] = 0
 
                 try:
-                    if supermercado_key != "DIA":
+                    if supermercado_key not in {"DIA", "MERCADONA"}:
                         with AdminService._scraping_lock:
                             source["estado"] = "pendiente"
                             source["fecha"] = datetime.now().strftime("%d %b %Y - %H:%M")
@@ -1097,6 +1104,7 @@ class AdminService:
                             dia_cookie=settings.dia_cookie,
                             dia_max_categories=settings.dia_max_categories,
                             dia_max_pages_per_category=settings.dia_max_pages_per_category,
+                            mercadona_max_categories=settings.mercadona_max_categories,
                         )
 
                         summary = asyncio.run(

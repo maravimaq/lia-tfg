@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     dia_cookie: str | None = None
     dia_max_categories: int = 20
     dia_max_pages_per_category: int = 3
+    
+    # Mercadona
+    mercadona_max_categories: int = 40
 
     model_config = SettingsConfigDict(env_file=".env")
 
