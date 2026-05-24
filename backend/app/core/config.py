@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     aldi_max_article_links: int = 120
     aldi_max_products: int = 120
     aldi_use_playwright_fallback: bool = True
+    
+    # Alcampo
+    alcampo_max_urls: int = 3
+    alcampo_max_products_per_url: int = 80
+    alcampo_use_playwright_fallback: bool = True
 
     model_config = SettingsConfigDict(env_file=".env")
 

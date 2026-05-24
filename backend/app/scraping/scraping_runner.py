@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.scraping.alcampo_scraper import AlcampoScraper
 from app.scraping.aldi_scraper import AldiScraper
 from app.scraping.base import DEFAULT_USER_AGENT, ScraperRunResult
 from app.scraping.carrefour_scraper import CarrefourScraper
@@ -100,7 +101,7 @@ class ScrapingRunner:
     Orquestador de scraping de catálogo.
 
     Este runner debe ser llamado desde AdminService.
-    AdminService no debería saber cómo parsear DIA, Mercadona, Carrefour, ALDI, etc.
+    AdminService no debería saber cómo parsear DIA, Mercadona, Carrefour, ALDI, Alcampo, etc.
     """
 
     def __init__(
@@ -120,6 +121,9 @@ class ScrapingRunner:
         aldi_max_article_links: int = 120,
         aldi_max_products: int = 120,
         aldi_use_playwright_fallback: bool = True,
+        alcampo_max_urls: int = 3,
+        alcampo_max_products_per_url: int = 80,
+        alcampo_use_playwright_fallback: bool = True,
     ) -> None:
         self.db = db
         self.timeout_seconds = timeout_seconds
@@ -139,6 +143,10 @@ class ScrapingRunner:
         self.aldi_max_article_links = aldi_max_article_links
         self.aldi_max_products = aldi_max_products
         self.aldi_use_playwright_fallback = aldi_use_playwright_fallback
+
+        self.alcampo_max_urls = alcampo_max_urls
+        self.alcampo_max_products_per_url = alcampo_max_products_per_url
+        self.alcampo_use_playwright_fallback = alcampo_use_playwright_fallback
 
         self.importer = CatalogImporter(db)
 
@@ -170,6 +178,11 @@ class ScrapingRunner:
         if "ALDI" in selected:
             source_results.append(
                 await self._run_aldi(commit=commit)
+            )
+
+        if "ALCAMPO" in selected:
+            source_results.append(
+                await self._run_alcampo(commit=commit)
             )
 
         summary = self._build_summary(source_results)
@@ -250,6 +263,25 @@ class ScrapingRunner:
             max_article_links=self.aldi_max_article_links,
             max_products=self.aldi_max_products,
             use_playwright_fallback=self.aldi_use_playwright_fallback,
+        )
+
+        try:
+            scraper_result = await scraper.scrape()
+        finally:
+            await scraper.close()
+
+        return self._import_scraper_result(
+            scraper_result,
+            commit=commit,
+        )
+
+    async def _run_alcampo(self, *, commit: bool) -> SourceExecutionResult:
+        scraper = AlcampoScraper(
+            timeout_seconds=self.timeout_seconds,
+            user_agent=self.user_agent,
+            max_urls=self.alcampo_max_urls,
+            max_products_per_url=self.alcampo_max_products_per_url,
+            use_playwright_fallback=self.alcampo_use_playwright_fallback,
         )
 
         try:
@@ -357,7 +389,7 @@ class ScrapingRunner:
     @staticmethod
     def _normalize_supermarkets(supermarkets: Optional[list[str]]) -> set[str]:
         if not supermarkets:
-            return {"DIA", "MERCADONA", "CARREFOUR", "ALDI"}
+            return {"DIA", "MERCADONA", "CARREFOUR", "ALDI", "ALCAMPO"}
 
         return {
             supermarket.strip().upper()

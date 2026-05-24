@@ -189,6 +189,14 @@ class AdminService:
                 "selector": None,
                 "price_regex": AdminService.DEFAULT_PRICE_REGEX,
             },
+            {
+                "supermercado": "Alcampo",
+                "urls": ["https://www.compraonline.alcampo.es/categories"],
+                "crawl_internal_links": False,
+                "link_include_regex": None,
+                "selector": None,
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
+            },
         ]
 
     @staticmethod
@@ -1100,7 +1108,7 @@ class AdminService:
                     source["productos_actualizados"] = 0
 
                 try:
-                    if supermercado_key not in {"DIA", "MERCADONA", "CARREFOUR", "ALDI"}:
+                    if supermercado_key not in {"DIA", "MERCADONA", "CARREFOUR", "ALDI", "ALCAMPO"}:
                         with AdminService._scraping_lock:
                             source["estado"] = "pendiente"
                             source["fecha"] = datetime.now().strftime("%d %b %Y - %H:%M")
@@ -1128,6 +1136,9 @@ class AdminService:
                             aldi_max_article_links=settings.aldi_max_article_links,
                             aldi_max_products=settings.aldi_max_products,
                             aldi_use_playwright_fallback=settings.aldi_use_playwright_fallback,
+                            alcampo_max_urls=settings.alcampo_max_urls,
+                            alcampo_max_products_per_url=settings.alcampo_max_products_per_url,
+                            alcampo_use_playwright_fallback=settings.alcampo_use_playwright_fallback,
                         )
 
                         summary = asyncio.run(
