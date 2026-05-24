@@ -1,3 +1,4 @@
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.producto import Producto
@@ -63,3 +64,31 @@ class ProductoRepository:
             query = query.order_by(Producto.precio_unitario.desc())
 
         return query.all()
+
+    @staticmethod
+    def search_by_text(
+        db: Session,
+        text: str,
+        limit: int = 8,
+        orden_precio: str | None = "asc",
+    ) -> list[Producto]:
+        clean_text = text.strip()
+
+        if not clean_text:
+            return []
+
+        query = db.query(Producto).filter(
+            or_(
+                Producto.nombre.ilike(f"%{clean_text}%"),
+                Producto.marca.ilike(f"%{clean_text}%"),
+                Producto.categoria.ilike(f"%{clean_text}%"),
+                Producto.supermercado.ilike(f"%{clean_text}%"),
+            )
+        )
+
+        if orden_precio == "asc":
+            query = query.order_by(Producto.precio_unitario.asc())
+        elif orden_precio == "desc":
+            query = query.order_by(Producto.precio_unitario.desc())
+
+        return query.limit(limit).all()
