@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str
     access_token_expire_minutes: int
     google_web_client_id: str | None = None
+
     scraping_sources_json: str | None = None
     scraping_user_agent: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -14,6 +15,11 @@ class Settings(BaseSettings):
         "Chrome/124.0.0.0 Safari/537.36"
     )
     scraping_timeout_seconds: int = 25
+
+    # DIA
+    dia_cookie: str | None = None
+    dia_max_categories: int = 20
+    dia_max_pages_per_category: int = 3
 
     model_config = SettingsConfigDict(env_file=".env")
 

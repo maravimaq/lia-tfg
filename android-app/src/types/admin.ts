@@ -73,7 +73,13 @@ export type AdminScrapingStoreStatus = {
 
 export type AdminScrapingOverviewResponse = {
   ultima_ejecucion_fecha: string;
-  ultima_ejecucion_estado: "ok" | "error" | "en_proceso" | "cancelado" | string;
+  ultima_ejecucion_estado:
+  | "ok"
+  | "parcial"
+  | "error"
+  | "en_proceso"
+  | "cancelado"
+  | string;
   progreso_general: number;
   en_curso: boolean;
   tiempo_restante_segundos: number;
