@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 import Screen from "@/src/components/Screen";
 import AppButton from "@/src/components/AppButton";
@@ -30,6 +30,7 @@ type ModalState =
 
 export default function AdminUsersScreen() {
   const { user } = useAuth();
+  const params = useLocalSearchParams<{ search?: string }>();
 
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
   const [searchInput, setSearchInput] = useState("");
@@ -78,8 +79,12 @@ export default function AdminUsersScreen() {
 
   useEffect(() => {
     if (user?.rol_id !== 2) return;
-    loadUsers("");
-  }, [user?.rol_id]);
+
+    const initialSearch = typeof params.search === "string" ? params.search : "";
+    setSearchInput(initialSearch);
+    setSearchApplied(initialSearch);
+    loadUsers(initialSearch);
+  }, [user?.rol_id, params.search]);
 
   const openCreate = () => {
     setForm({

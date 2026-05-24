@@ -15,6 +15,14 @@ class Settings(BaseSettings):
         "Chrome/124.0.0.0 Safari/537.36"
     )
     scraping_timeout_seconds: int = 25
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_from_name: str = "LIA"
+    smtp_use_tls: bool = True
+    password_reset_url: str = "lia://reset-password"
 
     # DIA
     dia_cookie: str | None = None

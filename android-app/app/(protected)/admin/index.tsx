@@ -8,6 +8,7 @@ import ProfileSideMenu from "@/src/components/ProfileSideMenu";
 import { Colors } from "@/src/constants/colors";
 import { useAuth } from "@/src/hooks/useAuth";
 import { adminService } from "@/src/services/admin";
+import { userService } from "@/src/services/user";
 import { AdminDashboardResponse, AdminScrapingOverviewResponse } from "@/src/types/admin";
 
 function initials(name?: string) {
@@ -32,6 +33,16 @@ export default function AdminDashboardScreen() {
       await signOut();
     } finally {
       router.replace("/(auth)/sign-in");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      await userService.requestAccountAction({ tipo: "eliminacion" });
+      await signOut();
+      router.replace("/(auth)/sign-in");
+    } catch (error: any) {
+      Alert.alert("Error", error?.response?.data?.detail || "No se pudo solicitar la eliminación de la cuenta");
     }
   };
 
@@ -61,7 +72,11 @@ export default function AdminDashboardScreen() {
     if (user?.rol_id !== 2) return;
     const intervalId = setInterval(async () => {
       try {
-        const scrapingData = await adminService.getScrapingOverview();
+        const [dashboardData, scrapingData] = await Promise.all([
+          adminService.getDashboard(),
+          adminService.getScrapingOverview(),
+        ]);
+        setDashboard(dashboardData);
         setScraping(scrapingData);
       } catch {
         // Evitamos alertas en bucle durante el polling.
@@ -101,6 +116,29 @@ export default function AdminDashboardScreen() {
       <View style={styles.titleWrap}>
         <Text style={styles.title}>Panel de Administración</Text>
       </View>
+
+      {dashboard?.solicitudes_eliminacion_pendientes?.length ? (
+        <View style={styles.priorityCard}>
+          <Text style={styles.priorityTitle}>⚠ Solicitudes de eliminación pendientes</Text>
+          {dashboard.solicitudes_eliminacion_pendientes.map((request) => (
+            <Pressable
+              key={request.id_solicitud}
+              style={styles.priorityNotification}
+              onPress={() =>
+                router.push({
+                  pathname: "/(protected)/admin/users",
+                  params: { search: request.nombre_usuario },
+                })
+              }
+            >
+              <Text style={styles.priorityText}>
+                El usuario @{request.nombre_usuario} quiere que le eliminen la cuenta.
+              </Text>
+              <Text style={styles.prioritySubtext}>Pulsa para ir al CRUD de usuarios y eliminarla.</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
@@ -199,6 +237,7 @@ export default function AdminDashboardScreen() {
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         onLogout={handleLogout}
+        onDeleteAccount={handleDeleteAccount}
         isAdmin={user?.rol_id === 2}
       />
     </Screen>
@@ -247,6 +286,31 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontWeight: "700", color: Colors.text, textAlign: "center" },
   statValue: { marginTop: 8, fontSize: 36, fontWeight: "800", color: Colors.black },
+  priorityCard: {
+    backgroundColor: "#fff5f5",
+    borderWidth: 2,
+    borderColor: Colors.danger,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+  },
+  priorityTitle: {
+    color: Colors.danger,
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  priorityNotification: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.danger,
+    padding: 12,
+    marginTop: 8,
+  },
+  priorityText: { color: Colors.title, fontWeight: "800", marginBottom: 4 },
+  prioritySubtext: { color: Colors.textMuted, fontSize: 12 },
   card: {
     backgroundColor: Colors.card,
     borderWidth: 1,

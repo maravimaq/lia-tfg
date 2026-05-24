@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (currentToken) {
       try {
-        await authService.logout();
+        await authService.logout(currentToken);
       } catch (error) {
         console.log("Logout warning:", error);
       }
