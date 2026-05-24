@@ -44,8 +44,12 @@ export default function ProfileScreen() {
   const [followingUserId, setFollowingUserId] = useState<number | null>(null);
   const [requestActionId, setRequestActionId] = useState<number | null>(null);
 
-  const loadFriendsData = async (query = "") => {
-    setFriendsLoading(true);
+  const loadFriendsData = async (query = "", options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? false;
+
+    if (showLoading) {
+      setFriendsLoading(true);
+    }
     try {
       const [discovery, incoming] = await Promise.all([
         userService.discoverUsers(query),
@@ -56,13 +60,15 @@ export default function ProfileScreen() {
     } catch (error: any) {
       Alert.alert("Error", error?.response?.data?.detail || "No se pudo cargar la sección de amigos");
     } finally {
-      setFriendsLoading(false);
+      if (showLoading) {
+        setFriendsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     refreshProfile().catch(() => undefined);
-    loadFriendsData().catch(() => undefined);
+    loadFriendsData("", { showLoading: true }).catch(() => undefined);
   }, []);
 
   useFocusEffect(

@@ -14,6 +14,7 @@ export const Colors = {
 
   text: "#20243A",
   textMuted: "#6E7594",
+  muted: "#6E7594",
   title: "#2C3154",
 
   black: "#111111",
