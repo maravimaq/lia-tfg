@@ -181,6 +181,14 @@ class AdminService:
                 "selector": None,
                 "price_regex": AdminService.DEFAULT_PRICE_REGEX,
             },
+            {
+                "supermercado": "ALDI",
+                "urls": ["https://www.aldi.es/ofertas.html"],
+                "crawl_internal_links": False,
+                "link_include_regex": None,
+                "selector": None,
+                "price_regex": AdminService.DEFAULT_PRICE_REGEX,
+            },
         ]
 
     @staticmethod
@@ -1092,7 +1100,7 @@ class AdminService:
                     source["productos_actualizados"] = 0
 
                 try:
-                    if supermercado_key not in {"DIA", "MERCADONA", "CARREFOUR"}:
+                    if supermercado_key not in {"DIA", "MERCADONA", "CARREFOUR", "ALDI"}:
                         with AdminService._scraping_lock:
                             source["estado"] = "pendiente"
                             source["fecha"] = datetime.now().strftime("%d %b %Y - %H:%M")
@@ -1116,6 +1124,10 @@ class AdminService:
                             carrefour_max_urls=settings.carrefour_max_urls,
                             carrefour_max_products_per_url=settings.carrefour_max_products_per_url,
                             carrefour_use_playwright_fallback=settings.carrefour_use_playwright_fallback,
+                            aldi_max_listing_urls=settings.aldi_max_listing_urls,
+                            aldi_max_article_links=settings.aldi_max_article_links,
+                            aldi_max_products=settings.aldi_max_products,
+                            aldi_use_playwright_fallback=settings.aldi_use_playwright_fallback,
                         )
 
                         summary = asyncio.run(

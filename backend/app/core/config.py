@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     carrefour_max_urls: int = 3
     carrefour_max_products_per_url: int = 40
     carrefour_use_playwright_fallback: bool = True
+    
+    # ALDI
+    aldi_max_listing_urls: int = 3
+    aldi_max_article_links: int = 120
+    aldi_max_products: int = 120
+    aldi_use_playwright_fallback: bool = True
 
     model_config = SettingsConfigDict(env_file=".env")
 
