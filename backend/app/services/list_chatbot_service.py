@@ -12,6 +12,7 @@ from app.models.producto import Producto
 from app.models.producto_lista import ProductoLista
 from app.models.user import User
 from app.repositories.producto_repository import ProductoRepository
+from app.core.config import settings
 from app.schemas.chat import ListChatMessageRequest, ListChatMessageResponse
 from app.services.chatbot_ai_service import ListChatbotAIService
 from app.services.lista_compra_service import ListaCompraService
@@ -43,6 +44,36 @@ class ListChatbotService:
         "carrefour",
         "aldi",
         "alcampo",
+        "hacendado",
+        "caocream",
+        "molino",
+        "dia",
+        "rellena",
+        "relleno",
+        "crema",
+    }
+
+    PRODUCT_FAMILIES = {
+        "galleta": {"galleta", "galletas"},
+        "oblea": {"oblea", "obleas"},
+        "helado": {"helado", "helados"},
+        "croissant": {"croissant", "cruasán", "cruasan", "croissants"},
+        "napolitana": {"napolitana", "napolitanas"},
+        "leche": {"leche"},
+        "yogur": {"yogur", "yogurt", "yogures"},
+        "arroz": {"arroz"},
+        "pasta": {"pasta", "macarrones", "espaguetis", "spaghetti"},
+        "pollo": {"pollo", "pechuga", "pechugas"},
+        "tomate": {"tomate", "tomates"},
+        "aceite": {"aceite"},
+        "pan": {"pan", "molde", "barra", "baguette"},
+    }
+
+    INCOMPATIBLE_FAMILIES = {
+        frozenset({"galleta", "oblea"}),
+        frozenset({"galleta", "helado"}),
+        frozenset({"croissant", "napolitana"}),
+        frozenset({"pan", "galleta"}),
     }
 
     @staticmethod
@@ -70,7 +101,7 @@ class ListChatbotService:
                 "total_estimado": str(lista.total_estimado),
                 "num_productos": len(getattr(lista, "productos", [])),
                 "confidence": ai_response.confidence,
-                "provider": list_context.get("metadata", {}).get("provider_hint", "local"),
+                "provider": list_context.get("metadata", {}).get("provider_hint", settings.ai_provider),
             },
         )
 
@@ -254,7 +285,7 @@ class ListChatbotService:
             },
             "alternativas_en_catalogo": alternativas_contexto,
             "metadata": {
-                "provider_hint": "ollama_or_mock",
+                "provider_hint": (settings.ai_provider or "ollama").lower(),
                 "nota_importante": (
                     "Los totales por supermercado son los de los productos actualmente elegidos. "
                     "No equivalen a comparar toda la misma cesta en todos los supermercados. "
@@ -328,19 +359,50 @@ class ListChatbotService:
 
     @staticmethod
     def _is_reasonable_alternative(original: Producto, alternative: Producto) -> bool:
-        original_category = ListChatbotService._normalize(original.categoria)
-        alternative_category = ListChatbotService._normalize(alternative.categoria)
-
-        if original_category and alternative_category and original_category == alternative_category:
-            return True
-
         original_tokens = set(ListChatbotService._keywords(original.nombre))
         alternative_tokens = set(ListChatbotService._keywords(alternative.nombre))
 
         if not original_tokens or not alternative_tokens:
             return False
 
-        return len(original_tokens.intersection(alternative_tokens)) >= 1
+        original_family = ListChatbotService._detect_product_family(original.nombre)
+        alternative_family = ListChatbotService._detect_product_family(alternative.nombre)
+
+        if original_family and alternative_family:
+            if frozenset({original_family, alternative_family}) in ListChatbotService.INCOMPATIBLE_FAMILIES:
+                return False
+            if original_family != alternative_family:
+                return False
+
+        # Si el producto original tiene una familia clara, exigimos que la alternativa también la tenga.
+        # Así evitamos casos raros como "galletas" -> "obleas para helado" solo porque estén en una categoría parecida.
+        if original_family and not alternative_family:
+            return False
+
+        shared_tokens = original_tokens.intersection(alternative_tokens)
+        original_category = ListChatbotService._normalize(original.categoria)
+        alternative_category = ListChatbotService._normalize(alternative.categoria)
+        same_category = bool(original_category and alternative_category and original_category == alternative_category)
+
+        if original_family and alternative_family and original_family == alternative_family:
+            return same_category or len(shared_tokens) >= 1
+
+        # Sin familia clara, pedimos bastante parecido para considerar que hay sustitución real.
+        if same_category and len(shared_tokens) >= 2:
+            return True
+
+        return len(shared_tokens) >= 3
+
+    @staticmethod
+    def _detect_product_family(text: str | None) -> str | None:
+        normalized = ListChatbotService._normalize(text)
+        tokens = set(normalized.split())
+
+        for family, aliases in ListChatbotService.PRODUCT_FAMILIES.items():
+            if tokens.intersection(aliases):
+                return family
+
+        return None
 
     @staticmethod
     def _alternative_to_context(

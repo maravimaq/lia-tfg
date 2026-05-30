@@ -449,20 +449,20 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
         candidates = analysis.get("candidatos_ahorro", [])
 
         fragments = [
-            f"La lista '{nombre_lista}' tiene {len(productos)} producto(s) y un total estimado de {total:.2f} €."
+            f"La lista '{nombre_lista}' tiene {ListChatbotAIService._plural(len(productos), 'producto', 'productos')} y un total estimado de {ListChatbotAIService._format_money(total)}."
         ]
 
         if top_products:
             top = top_products[0]
             fragments.append(
                 f"El producto que más pesa en el coste es {top.get('nombre')}, "
-                f"con {float(top.get('precio_estimado', 0)):.2f} € "
-                f"({float(top.get('peso_en_total_porcentaje', 0)):.1f}% del total)."
+                f"con {ListChatbotAIService._format_money(top.get('precio_estimado', 0))} "
+                f"({ListChatbotAIService._format_percent(top.get('peso_en_total_porcentaje', 0))} del total)."
             )
 
         if breakdown:
             supermarket_text = ", ".join(
-                f"{item.get('supermercado')}: {float(item.get('total', 0)):.2f} €"
+                f"{item.get('supermercado')}: {ListChatbotAIService._format_money(item.get('total', 0))}"
                 for item in breakdown
             )
             fragments.append(f"Por supermercado, ahora mismo queda así: {supermarket_text}.")
@@ -470,7 +470,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
         sweet_count = ListChatbotAIService._count_sweet_products(productos)
         if sweet_count >= 2:
             fragments.append(
-                f"Veo {sweet_count} productos de bollería/dulces, así que si esta lista no es solo para desayuno o merienda, "
+                f"Veo {ListChatbotAIService._plural(sweet_count, 'producto', 'productos')} de bollería/dulces, así que si esta lista no es solo para desayuno o merienda, "
                 "la compra está bastante concentrada en ese tipo de producto."
             )
 
@@ -478,7 +478,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             best = candidates[0]
             fragments.append(
                 f"También hay una posible revisión de ahorro: {best.get('producto_original')} podría compararse con "
-                f"{best.get('alternativa')} ({float(best.get('ahorro_estimado', 0)):.2f} € de ahorro estimado), "
+                f"{best.get('alternativa')} ({ListChatbotAIService._format_money(best.get('ahorro_estimado', 0))} de ahorro estimado), "
                 "aunque habría que comprobar que sean equivalentes."
             )
 
@@ -503,7 +503,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             )
 
         details = ", ".join(
-            f"{item.get('supermercado')}: {float(item.get('total', 0)):.2f} €"
+            f"{item.get('supermercado')}: {ListChatbotAIService._format_money(item.get('total', 0))}"
             for item in breakdown
         )
 
@@ -511,7 +511,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             intent="comparar_lista_supermercados",
             reply=(
                 f"Con los productos actuales, el menor importe acumulado está en {cheapest.get('supermercado')} "
-                f"con {float(cheapest.get('total', 0)):.2f} €. Desglose: {details}. "
+                f"con {ListChatbotAIService._format_money(cheapest.get('total', 0))}. Desglose: {details}. "
                 "Ojo: esto compara los productos ya elegidos, no una cesta equivalente completa en cada supermercado."
             ),
             suggestions=[
@@ -539,8 +539,8 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
         reply = (
             f"La mejor oportunidad de ahorro que veo es revisar '{best.get('producto_original')}'. "
             f"Como alternativa aparece '{best.get('alternativa')}' en {best.get('supermercado_alternativa')} "
-            f"por {best.get('precio_alternativa'):.2f} €, con un ahorro estimado de "
-            f"{best.get('ahorro_estimado'):.2f} € para la misma cantidad. Comprueba que sea equivalente antes de cambiarlo."
+            f"por {ListChatbotAIService._format_money(best.get('precio_alternativa', 0))}, con un ahorro estimado de "
+            f"{ListChatbotAIService._format_money(best.get('ahorro_estimado', 0))} para la misma cantidad. Comprueba que sea equivalente antes de cambiarlo."
         )
 
         return ListChatAIResponse(
@@ -569,8 +569,8 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             product = high_quantity[0]
             reply = (
                 f"Revisaría primero la cantidad de {product.get('nombre')}: tienes "
-                f"{product.get('cantidad')} unidad(es), con un subtotal de "
-                f"{float(product.get('precio_estimado', 0)):.2f} €. "
+                f"{ListChatbotAIService._plural(product.get('cantidad'), 'unidad', 'unidades')}, con un subtotal de "
+                f"{ListChatbotAIService._format_money(product.get('precio_estimado', 0))}. "
                 "No significa que esté mal, pero es el candidato más claro para comprobar si la cantidad encaja con el uso real."
             )
             suggestions.append(
@@ -578,7 +578,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
                     type="quantity",
                     title="Cantidad a revisar",
                     description=(
-                        f"{product.get('nombre')} aparece con {product.get('cantidad')} unidad(es). "
+                        f"{product.get('nombre')} aparece con {ListChatbotAIService._plural(product.get('cantidad'), 'unidad', 'unidades')}. "
                         "Valida si es para una compra puntual o para varios días."
                     ),
                 )
@@ -594,7 +594,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
         if sweet_count >= 2:
             reply = (
                 "No veo una cantidad claramente excesiva solo por número de unidades, pero sí veo la lista bastante "
-                f"concentrada en bollería/dulces: {sweet_count} producto(s) de ese tipo. "
+                f"concentrada en bollería/dulces: {ListChatbotAIService._plural(sweet_count, 'producto', 'productos')} de ese tipo. "
                 "Si la lista es para desayuno o merienda, tiene sentido; si es una compra general, la equilibraría."
             )
             suggestions.append(
@@ -602,7 +602,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
                     type="warning",
                     title="Revisar equilibrio de la lista",
                     description=(
-                        f"Hay {sweet_count} productos de bollería, galletas o chocolate. "
+                        f"Hay {ListChatbotAIService._plural(sweet_count, 'producto', 'productos')} de bollería, galletas o chocolate. "
                         "La cantidad no parece excesiva, pero la variedad está muy concentrada."
                     ),
                 )
@@ -619,7 +619,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             reply = (
                 "No veo cantidades claramente problemáticas. Si quieres revisar algo, empezaría por "
                 f"{top.get('nombre')}, porque es el producto que más pesa en el coste: "
-                f"{float(top.get('precio_estimado', 0)):.2f} €."
+                f"{ListChatbotAIService._format_money(top.get('precio_estimado', 0))}."
             )
             suggestions.append(
                 ListChatSuggestion(
@@ -668,7 +668,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
                 return ListChatAIResponse(
                     intent="recomendar_cantidad",
                     reply=(
-                        f"En tu lista tienes {relevant.get('cantidad')} unidad(es) de {relevant.get('nombre')}. "
+                        f"En tu lista tienes {ListChatbotAIService._plural(relevant.get('cantidad'), 'unidad', 'unidades')} de {relevant.get('nombre')}. "
                         "Para ajustar mejor la cantidad, dime para cuántas personas o comidas es."
                     ),
                     suggestions=[
@@ -706,14 +706,14 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             return ListChatAIResponse(
                 intent="detectar_excesos",
                 reply=(
-                    f"Revisaría la cantidad de {product.get('nombre')}: tienes {product.get('cantidad')} unidad(es). "
+                    f"Revisaría la cantidad de {product.get('nombre')}: tienes {ListChatbotAIService._plural(product.get('cantidad'), 'unidad', 'unidades')}. "
                     "Si es para pocos días o para una sola comida, podría ser demasiado; si es compra semanal, puede tener sentido."
                 ),
                 suggestions=[
                     ListChatSuggestion(
                         type="warning",
                         title="Cantidad alta",
-                        description=f"{product.get('nombre')} aparece con {product.get('cantidad')} unidad(es).",
+                        description=f"{product.get('nombre')} aparece con {ListChatbotAIService._plural(product.get('cantidad'), 'unidad', 'unidades')}.",
                     )
                 ],
                 confidence=0.8,
@@ -742,7 +742,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
                     title="Revisar posible ahorro",
                     description=(
                         f"Hay una alternativa para {best.get('producto_original')} con ahorro estimado de "
-                        f"{float(best.get('ahorro_estimado', 0)):.2f} €. Comprueba equivalencia antes de sustituir."
+                        f"{ListChatbotAIService._format_money(best.get('ahorro_estimado', 0))}. Comprueba equivalencia antes de sustituir."
                     ),
                 )
             )
@@ -754,7 +754,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
                 ListChatSuggestion(
                     type="warning",
                     title="Cantidad alta",
-                    description=f"{product.get('nombre')} tiene {product.get('cantidad')} unidad(es).",
+                    description=f"{product.get('nombre')} tiene {ListChatbotAIService._plural(product.get('cantidad'), 'unidad', 'unidades')}.",
                 )
             )
 
@@ -767,7 +767,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
                     title="Producto con más peso",
                     description=(
                         f"{top.get('nombre')} representa aproximadamente "
-                        f"{float(top.get('peso_en_total_porcentaje', 0)):.1f}% del total de la lista."
+                        f"{ListChatbotAIService._format_percent(top.get('peso_en_total_porcentaje', 0))} del total de la lista."
                     ),
                 )
             )
@@ -780,7 +780,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
                         type="warning",
                         title="Lista concentrada en dulces",
                         description=(
-                            f"Hay {sweet_count} productos de bollería, galletas o chocolate. "
+                            f"Hay {ListChatbotAIService._plural(sweet_count, 'producto', 'productos')} de bollería, galletas o chocolate. "
                             "Si es una compra general, podrías equilibrarla con otros básicos."
                         ),
                     )
@@ -893,7 +893,7 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             low, high, unit = people, people, "ración por persona"
 
         return (
-            f"Para {people} persona(s), compraría aproximadamente entre {low} y {high} {unit}. "
+            f"Para {ListChatbotAIService._plural(people, 'persona', 'personas')}, compraría aproximadamente entre {low} y {high} {unit}. "
             "Tira hacia el extremo alto si es plato principal o si queréis repetir."
         )
 
@@ -908,6 +908,25 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             if any(token in name for token in message_tokens):
                 return product
         return None
+
+    @staticmethod
+    def _format_money(value: Any) -> str:
+        amount = ListChatbotAIService._to_float(value)
+        return f"{amount:.2f}".replace(".", ",") + " €"
+
+    @staticmethod
+    def _format_percent(value: Any) -> str:
+        percent = ListChatbotAIService._to_float(value)
+        return f"{percent:.1f}".replace(".", ",") + " %"
+
+    @staticmethod
+    def _plural(value: Any, singular: str, plural: str) -> str:
+        try:
+            number = int(value or 0)
+        except (TypeError, ValueError):
+            number = 0
+        word = singular if number == 1 else plural
+        return f"{number} {word}"
 
     @staticmethod
     def _to_float(value: Any) -> float:
