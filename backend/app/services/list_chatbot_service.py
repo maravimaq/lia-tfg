@@ -21,6 +21,8 @@ from app.services.lista_compra_service import ListaCompraService
 class ListChatbotService:
     MAX_ALTERNATIVES_PER_PRODUCT = 6
     MAX_SAVING_CANDIDATES = 8
+    MAX_EQUIVALENT_PRODUCTS_FOR_COMPARISON = 300
+    MAX_PRODUCT_LEVEL_COMPARISONS = 6
 
     STOPWORDS = {
         "de",
@@ -52,6 +54,8 @@ class ListChatbotService:
         "relleno",
         "crema",
     }
+
+    CHOCOLATE_WORDS = {"chocolate", "cacao", "cacaos", "choco", "chips"}
 
     PRODUCT_FAMILIES = {
         "galleta": {"galleta", "galletas"},
@@ -114,6 +118,8 @@ class ListChatbotService:
         categorias_totales: dict[str, dict[str, Any]] = {}
         alternativas_contexto: list[dict[str, Any]] = []
         candidatos_ahorro: list[dict[str, Any]] = []
+        equivalencias_por_producto: list[dict[str, Any]] = []
+        comparativas_por_producto: list[dict[str, Any]] = []
 
         total_lista = ListChatbotService._to_decimal(lista.total_estimado)
 
@@ -155,7 +161,27 @@ class ListChatbotService:
             categorias_totales[categoria]["num_productos"] += 1
             categorias_totales[categoria]["subtotal"] += subtotal
 
-            alternativas = ListChatbotService._get_alternatives_for_product(db, producto)
+            equivalent_products = ListChatbotService._get_equivalent_products_for_product(db, producto)
+            equivalent_product_context = ListChatbotService._build_equivalent_product_context(
+                producto_lista=producto_lista,
+                producto=producto,
+                equivalent_products=equivalent_products,
+            )
+            equivalencias_por_producto.append(equivalent_product_context)
+
+            product_level_comparison = ListChatbotService._build_product_level_comparison(
+                producto_lista=producto_lista,
+                producto=producto,
+                equivalent_products=equivalent_products,
+            )
+            if product_level_comparison:
+                comparativas_por_producto.append(product_level_comparison)
+
+            alternativas = [
+                candidate
+                for candidate in equivalent_products
+                if candidate.id_producto != producto.id_producto
+            ][: ListChatbotService.MAX_ALTERNATIVES_PER_PRODUCT]
             cheaper_alternatives = [
                 alternative
                 for alternative in alternativas
@@ -263,6 +289,15 @@ class ListChatbotService:
             reverse=True,
         )[: ListChatbotService.MAX_SAVING_CANDIDATES]
 
+        comparativa_cesta_equivalente = ListChatbotService._build_equivalent_basket_comparison(
+            equivalencias_por_producto
+        )
+        comparativas_por_producto = sorted(
+            comparativas_por_producto,
+            key=lambda item: item.get("mejor_alternativa_otro_supermercado", {}).get("ahorro_estimado", 0),
+            reverse=True,
+        )[: ListChatbotService.MAX_PRODUCT_LEVEL_COMPARISONS]
+
         return {
             "lista": {
                 "id_lista": lista.id_lista,
@@ -278,6 +313,8 @@ class ListChatbotService:
                 "productos_con_cantidad_alta": productos_cantidad_alta,
                 "categorias_resumen": categorias_resumen,
                 "candidatos_ahorro": candidatos_ahorro,
+                "comparativa_por_producto": comparativas_por_producto,
+                "comparativa_cesta_equivalente": comparativa_cesta_equivalente,
             },
             "totales_actuales_por_supermercado": {
                 supermercado: float(total)
@@ -287,13 +324,15 @@ class ListChatbotService:
             "metadata": {
                 "provider_hint": (settings.ai_provider or "ollama").lower(),
                 "nota_importante": (
-                    "Los totales por supermercado son los de los productos actualmente elegidos. "
-                    "No equivalen a comparar toda la misma cesta en todos los supermercados. "
-                    "Las alternativas son coincidencias del catálogo y pueden no ser equivalentes exactos."
+                    "desglose_supermercados_actual agrupa los productos ya elegidos. "
+                    "comparativa_por_producto muestra alternativas parecidas más baratas en otros supermercados. "
+                    "comparativa_cesta_equivalente intenta reconstruir una cesta similar por supermercado. "
+                    "Las equivalencias del catálogo son aproximadas y pueden no ser exactas."
                 ),
                 "instrucciones_para_ia": (
-                    "Usa primero analisis_precalculado. Cita productos, cantidades y precios concretos. "
-                    "No des consejos genéricos si hay datos concretos disponibles."
+                    "Usa primero analisis_precalculado. Para comparar supermercados, prioriza "
+                    "comparativa_por_producto: el usuario quiere saber si hay productos concretos muy parecidos "
+                    "más baratos en otros supermercados. Cita productos, cantidades y precios concretos."
                 ),
             },
         }
@@ -303,25 +342,290 @@ class ListChatbotService:
         db: Session,
         product: Producto,
     ) -> list[Producto]:
-        candidates_by_id: dict[int, Producto] = {}
+        return [
+            candidate
+            for candidate in ListChatbotService._get_equivalent_products_for_product(db, product)
+            if candidate.id_producto != product.id_producto
+        ][: ListChatbotService.MAX_ALTERNATIVES_PER_PRODUCT]
 
-        for term in ListChatbotService._build_search_terms(product):
-            for alternative in ProductoRepository.search_by_text(
-                db=db,
-                text=term,
-                limit=12,
-                orden_precio="asc",
-            ):
-                if alternative.id_producto == product.id_producto:
-                    continue
-                if not ListChatbotService._is_reasonable_alternative(product, alternative):
-                    continue
-                candidates_by_id[alternative.id_producto] = alternative
+    @staticmethod
+    def _get_equivalent_products_for_product(
+        db: Session,
+        product: Producto,
+    ) -> list[Producto]:
+        """Busca alternativas comparables producto a producto.
 
-        return sorted(
-            candidates_by_id.values(),
-            key=lambda candidate: ListChatbotService._to_decimal(candidate.precio_unitario),
-        )[: ListChatbotService.MAX_ALTERNATIVES_PER_PRODUCT]
+        La versión anterior dependía demasiado de búsquedas SQL por texto exacto y por eso
+        podía no encontrar sustitutos útiles. Aquí recorremos el catálogo y puntuamos cada
+        producto por familia, categoría y palabras relevantes. El objetivo no es reconstruir
+        una cesta completa, sino encontrar frases útiles del tipo:
+        "tienes X a 4,00 €, he visto Y parecido a 3,00 €".
+        """
+        scored_candidates: list[tuple[int, Decimal, Producto]] = []
+
+        for candidate in ProductoRepository.get_all(db):
+            if candidate.id_producto == product.id_producto:
+                scored_candidates.append((10_000, ListChatbotService._to_decimal(candidate.precio_unitario), candidate))
+                continue
+
+            score = ListChatbotService._score_product_alternative(product, candidate)
+            if score <= 0:
+                continue
+
+            scored_candidates.append((score, ListChatbotService._to_decimal(candidate.precio_unitario), candidate))
+
+        scored_candidates.sort(
+            key=lambda item: (
+                item[2].id_producto != product.id_producto,
+                -item[0],
+                item[1],
+                str(item[2].nombre or "").lower(),
+            )
+        )
+
+        return [candidate for _, _, candidate in scored_candidates[: ListChatbotService.MAX_EQUIVALENT_PRODUCTS_FOR_COMPARISON]]
+
+    @staticmethod
+    def _build_equivalent_product_context(
+        producto_lista: ProductoLista,
+        producto: Producto,
+        equivalent_products: list[Producto],
+    ) -> dict[str, Any]:
+        cantidad = int(producto_lista.cantidad or 0)
+        opciones_por_supermercado: dict[str, dict[str, Any]] = {}
+
+        for candidate in equivalent_products:
+            supermercado = candidate.supermercado or "Sin supermercado"
+            candidate_price = ListChatbotService._to_decimal(candidate.precio_unitario)
+            current_option = opciones_por_supermercado.get(supermercado)
+
+            if current_option is not None:
+                current_price = ListChatbotService._to_decimal(current_option.get("precio_unitario"))
+                if current_price <= candidate_price:
+                    continue
+
+            opciones_por_supermercado[supermercado] = {
+                "producto_id": candidate.id_producto,
+                "nombre": candidate.nombre,
+                "marca": candidate.marca,
+                "categoria": candidate.categoria,
+                "supermercado": supermercado,
+                "precio_unitario": float(candidate_price),
+                "subtotal_estimado": float(candidate_price * Decimal(cantidad)),
+                "unidad_medida": candidate.unidad_medida,
+                "es_producto_original": candidate.id_producto == producto.id_producto,
+            }
+
+        return {
+            "producto_original": {
+                "producto_id": producto.id_producto,
+                "nombre": producto.nombre,
+                "marca": producto.marca,
+                "categoria": producto.categoria,
+                "supermercado": producto.supermercado,
+                "precio_unitario": float(ListChatbotService._to_decimal(producto.precio_unitario)),
+                "cantidad": cantidad,
+                "subtotal": float(ListChatbotService._to_decimal(producto_lista.precio_estimado)),
+                "unidad_medida": producto.unidad_medida,
+            },
+            "cantidad": cantidad,
+            "opciones_por_supermercado": opciones_por_supermercado,
+        }
+
+    @staticmethod
+    def _build_product_level_comparison(
+        producto_lista: ProductoLista,
+        producto: Producto,
+        equivalent_products: list[Producto],
+    ) -> dict[str, Any] | None:
+        """Compara un producto de la lista con alternativas parecidas de otros supermercados.
+
+        Esta comparación es la que usa el chatbot cuando el usuario pregunta dónde es más barata
+        su lista en sentido práctico: producto actual frente a sustitutos similares, no una cesta
+        completa reconstruida al 100%.
+        """
+        cantidad = int(producto_lista.cantidad or 0)
+        if cantidad <= 0:
+            return None
+
+        precio_original = ListChatbotService._to_decimal(producto.precio_unitario)
+        subtotal_original = ListChatbotService._to_decimal(producto_lista.precio_estimado)
+        supermercado_original = producto.supermercado or "Sin supermercado"
+
+        opciones: list[dict[str, Any]] = []
+        seen_product_ids: set[int] = set()
+
+        for candidate in equivalent_products:
+            if candidate.id_producto in seen_product_ids:
+                continue
+            seen_product_ids.add(candidate.id_producto)
+
+            candidate_price = ListChatbotService._to_decimal(candidate.precio_unitario)
+            candidate_supermarket = candidate.supermercado or "Sin supermercado"
+            subtotal_estimado = candidate_price * Decimal(cantidad)
+            ahorro_estimado = subtotal_original - subtotal_estimado
+
+            opciones.append(
+                {
+                    "producto_id": candidate.id_producto,
+                    "nombre": candidate.nombre,
+                    "marca": candidate.marca,
+                    "categoria": candidate.categoria,
+                    "supermercado": candidate_supermarket,
+                    "precio_unitario": float(candidate_price),
+                    "cantidad": cantidad,
+                    "subtotal_estimado": float(subtotal_estimado),
+                    "ahorro_estimado": float(ahorro_estimado),
+                    "unidad_medida": candidate.unidad_medida,
+                    "es_producto_original": candidate.id_producto == producto.id_producto,
+                    "es_otro_supermercado": candidate_supermarket != supermercado_original,
+                }
+            )
+
+        opciones = sorted(
+            opciones,
+            key=lambda item: (
+                not item["es_otro_supermercado"],
+                ListChatbotService._to_decimal(item["precio_unitario"]),
+            ),
+        )
+
+        alternativas_otro_supermercado = [
+            option
+            for option in opciones
+            if option["es_otro_supermercado"]
+        ]
+        alternativas_mas_baratas = sorted(
+            [option for option in alternativas_otro_supermercado if option["ahorro_estimado"] > 0],
+            key=lambda item: item["ahorro_estimado"],
+            reverse=True,
+        )
+        alternativas_otro_supermercado = sorted(
+            alternativas_otro_supermercado,
+            key=lambda item: (
+                item["ahorro_estimado"] <= 0,
+                -item["ahorro_estimado"],
+                ListChatbotService._to_decimal(item["precio_unitario"]),
+            ),
+        )
+
+        if not alternativas_otro_supermercado:
+            return None
+
+        best_other = alternativas_mas_baratas[0] if alternativas_mas_baratas else alternativas_otro_supermercado[0]
+
+        return {
+            "producto_original": {
+                "producto_id": producto.id_producto,
+                "nombre": producto.nombre,
+                "marca": producto.marca,
+                "categoria": producto.categoria,
+                "supermercado": supermercado_original,
+                "precio_unitario": float(precio_original),
+                "cantidad": cantidad,
+                "subtotal": float(subtotal_original),
+                "unidad_medida": producto.unidad_medida,
+            },
+            "opciones_comparables": opciones[:6],
+            "alternativas_mas_baratas_otro_supermercado": alternativas_mas_baratas[:4],
+            "alternativas_otro_supermercado": alternativas_otro_supermercado[:4],
+            "mejor_alternativa_otro_supermercado": best_other,
+            "tiene_ahorro": best_other.get("ahorro_estimado", 0) > 0,
+        }
+
+    @staticmethod
+    def _build_equivalent_basket_comparison(
+        equivalencias_por_producto: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        total_productos = len(equivalencias_por_producto)
+        if total_productos == 0:
+            return {
+                "total_productos_lista": 0,
+                "ranking": [],
+                "cestas_completas": [],
+                "cestas_parciales": [],
+                "mejor_cesta_completa": None,
+                "nota": "La lista no tiene productos suficientes para comparar una cesta equivalente.",
+            }
+
+        supermercados = sorted(
+            {
+                supermercado
+                for item in equivalencias_por_producto
+                for supermercado in item.get("opciones_por_supermercado", {}).keys()
+            }
+        )
+
+        ranking: list[dict[str, Any]] = []
+
+        for supermercado in supermercados:
+            total = Decimal("0")
+            productos_encontrados: list[dict[str, Any]] = []
+            productos_no_encontrados: list[str] = []
+
+            for item in equivalencias_por_producto:
+                original = item.get("producto_original", {})
+                cantidad = int(item.get("cantidad") or 0)
+                option = item.get("opciones_por_supermercado", {}).get(supermercado)
+
+                if option is None:
+                    productos_no_encontrados.append(str(original.get("nombre", "Producto sin nombre")))
+                    continue
+
+                subtotal = ListChatbotService._to_decimal(option.get("subtotal_estimado"))
+                total += subtotal
+                productos_encontrados.append(
+                    {
+                        "producto_original": original.get("nombre"),
+                        "producto_equivalente": option.get("nombre"),
+                        "producto_id": option.get("producto_id"),
+                        "cantidad": cantidad,
+                        "precio_unitario": option.get("precio_unitario"),
+                        "subtotal_estimado": option.get("subtotal_estimado"),
+                        "unidad_medida": option.get("unidad_medida"),
+                        "es_producto_original": option.get("es_producto_original", False),
+                    }
+                )
+
+            encontrados = len(productos_encontrados)
+            if encontrados == 0:
+                continue
+
+            ranking.append(
+                {
+                    "supermercado": supermercado,
+                    "total_estimado": float(total),
+                    "productos_encontrados": encontrados,
+                    "productos_totales": total_productos,
+                    "cobertura_porcentaje": round((encontrados / total_productos) * 100, 2),
+                    "cesta_completa": encontrados == total_productos,
+                    "productos": productos_encontrados,
+                    "productos_no_encontrados": productos_no_encontrados,
+                }
+            )
+
+        cestas_completas = sorted(
+            [item for item in ranking if item["cesta_completa"]],
+            key=lambda item: item["total_estimado"],
+        )
+        cestas_parciales = sorted(
+            [item for item in ranking if not item["cesta_completa"]],
+            key=lambda item: (-item["productos_encontrados"], item["total_estimado"]),
+        )
+
+        ranking_ordenado = cestas_completas + cestas_parciales
+
+        return {
+            "total_productos_lista": total_productos,
+            "ranking": ranking_ordenado,
+            "cestas_completas": cestas_completas,
+            "cestas_parciales": cestas_parciales,
+            "mejor_cesta_completa": cestas_completas[0] if cestas_completas else None,
+            "nota": (
+                "Comparación aproximada: para cada producto se busca el equivalente más barato encontrado "
+                "en cada supermercado. Solo las cestas completas son comparables de forma razonable."
+            ),
+        }
 
     @staticmethod
     def _build_search_terms(product: Producto) -> list[str]:
@@ -359,39 +663,72 @@ class ListChatbotService:
 
     @staticmethod
     def _is_reasonable_alternative(original: Producto, alternative: Producto) -> bool:
+        return ListChatbotService._score_product_alternative(original, alternative) > 0
+
+    @staticmethod
+    def _score_product_alternative(original: Producto, alternative: Producto) -> int:
         original_tokens = set(ListChatbotService._keywords(original.nombre))
         alternative_tokens = set(ListChatbotService._keywords(alternative.nombre))
 
         if not original_tokens or not alternative_tokens:
-            return False
+            return 0
 
         original_family = ListChatbotService._detect_product_family(original.nombre)
         alternative_family = ListChatbotService._detect_product_family(alternative.nombre)
 
         if original_family and alternative_family:
             if frozenset({original_family, alternative_family}) in ListChatbotService.INCOMPATIBLE_FAMILIES:
-                return False
+                return 0
             if original_family != alternative_family:
-                return False
+                return 0
 
-        # Si el producto original tiene una familia clara, exigimos que la alternativa también la tenga.
-        # Así evitamos casos raros como "galletas" -> "obleas para helado" solo porque estén en una categoría parecida.
         if original_family and not alternative_family:
-            return False
+            return 0
 
         shared_tokens = original_tokens.intersection(alternative_tokens)
         original_category = ListChatbotService._normalize(original.categoria)
         alternative_category = ListChatbotService._normalize(alternative.categoria)
         same_category = bool(original_category and alternative_category and original_category == alternative_category)
 
+        original_supermarket = ListChatbotService._normalize(original.supermercado)
+        alternative_supermarket = ListChatbotService._normalize(alternative.supermercado)
+        other_supermarket = original_supermarket != alternative_supermarket
+
+        score = 0
+
         if original_family and alternative_family and original_family == alternative_family:
-            return same_category or len(shared_tokens) >= 1
+            score += 60
+        elif same_category:
+            score += 30
+        else:
+            return 0
 
-        # Sin familia clara, pedimos bastante parecido para considerar que hay sustitución real.
-        if same_category and len(shared_tokens) >= 2:
-            return True
+        score += min(len(shared_tokens), 5) * 12
 
-        return len(shared_tokens) >= 3
+        # Para productos de chocolate/cacao, no exigimos que compartan exactamente "cacao" y
+        # "chocolate", pero sí premiamos que ambos sean de esa familia de sabor.
+        original_has_chocolate = bool(original_tokens.intersection(ListChatbotService.CHOCOLATE_WORDS))
+        alternative_has_chocolate = bool(alternative_tokens.intersection(ListChatbotService.CHOCOLATE_WORDS))
+        if original_has_chocolate and alternative_has_chocolate:
+            score += 20
+        elif original_has_chocolate != alternative_has_chocolate:
+            score -= 20
+
+        if same_category:
+            score += 15
+
+        if other_supermarket:
+            score += 8
+
+        # Umbrales por familia. En galletas/bollería necesitamos ser más flexibles porque
+        # los nombres comerciales cambian mucho entre supermercados.
+        if original_family in {"galleta", "croissant", "napolitana"}:
+            return score if score >= 60 else 0
+
+        if original_family:
+            return score if score >= 70 else 0
+
+        return score if score >= 75 else 0
 
     @staticmethod
     def _detect_product_family(text: str | None) -> str | None:

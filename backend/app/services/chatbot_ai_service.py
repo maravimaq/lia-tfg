@@ -52,7 +52,7 @@ REGLAS DE SEGURIDAD Y COHERENCIA
 
 CÓMO USAR EL CONTEXTO
 - Prioriza el bloque "analisis_precalculado".
-- Para "¿Dónde es más barata mi lista?", usa "desglose_supermercados_actual" y aclara que compara los productos ya elegidos, no una cesta equivalente completa.
+- Para "¿Dónde es más barata mi lista?", usa primero "comparativa_por_producto": compara productos concretos de la lista con alternativas muy parecidas y más baratas en otros supermercados. No limites la respuesta a una cesta completa.
 - Para ahorro o sustituciones, usa "candidatos_ahorro" y menciona el ahorro estimado si aparece.
 - Para cantidades, usa los productos de la lista si son relevantes; si no, da una regla práctica por persona.
 - Para excesos, usa cantidades altas, productos repetidos o categorías con mucho peso.
@@ -491,41 +491,185 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
 
     @staticmethod
     def _build_supermarket_comparison_response(analysis: dict) -> ListChatAIResponse:
-        breakdown = analysis.get("desglose_supermercados_actual", [])
-        cheapest = analysis.get("supermercado_mas_barato_actual")
+        product_comparisons = analysis.get("comparativa_por_producto", []) or []
 
-        if not breakdown or not cheapest:
-            return ListChatAIResponse(
-                intent="comparar_lista_supermercados",
-                reply="No tengo suficientes datos de supermercado para comparar esta lista.",
-                suggestions=[],
-                confidence=0.65,
+        if product_comparisons:
+            saving_comparisons = [
+                comparison
+                for comparison in product_comparisons
+                if comparison.get("tiene_ahorro")
+            ]
+            neutral_comparisons = [
+                comparison
+                for comparison in product_comparisons
+                if not comparison.get("tiene_ahorro")
+            ]
+
+            selected_comparisons = (saving_comparisons or neutral_comparisons)[:3]
+
+            if saving_comparisons:
+                fragments = [
+                    "He revisado tu lista producto a producto y estas son las alternativas parecidas más baratas que he encontrado."
+                ]
+            else:
+                fragments = [
+                    "He revisado tu lista producto a producto. He encontrado productos parecidos en otros supermercados, pero no salen claramente más baratos con los precios actuales."
+                ]
+
+            for comparison in selected_comparisons:
+                original = comparison.get("producto_original", {})
+                alternative = comparison.get("mejor_alternativa_otro_supermercado", {})
+                fragments.append(
+                    ListChatbotAIService._format_product_level_comparison(
+                        original=original,
+                        alternative=alternative,
+                    )
+                )
+
+            fragments.append(
+                "La comparación es orientativa: son productos parecidos del catálogo, no necesariamente idénticos en formato, marca o peso."
             )
 
-        details = ", ".join(
-            f"{item.get('supermercado')}: {ListChatbotAIService._format_money(item.get('total', 0))}"
-            for item in breakdown
-        )
+            suggestions = []
+            for comparison in selected_comparisons:
+                original = comparison.get("producto_original", {})
+                alternative = comparison.get("mejor_alternativa_otro_supermercado", {})
+                ahorro = float(alternative.get("ahorro_estimado") or 0)
+                title = (
+                    f"Ahorro en {original.get('nombre')}"
+                    if ahorro > 0
+                    else f"Alternativa encontrada para {original.get('nombre')}"
+                )
+                description = (
+                    f"En {alternative.get('supermercado')} aparece {alternative.get('nombre')} por "
+                    f"{ListChatbotAIService._format_money(alternative.get('precio_unitario', 0))}. "
+                )
+                if ahorro > 0:
+                    description += f"Ahorro estimado: {ListChatbotAIService._format_money(ahorro)}."
+                else:
+                    description += "No mejora claramente el precio, pero sirve como referencia comparable."
+
+                suggestions.append(
+                    ListChatSuggestion(
+                        type="saving" if ahorro > 0 else "info",
+                        title=title,
+                        description=description,
+                    )
+                )
+
+            return ListChatAIResponse(
+                intent="comparar_lista_supermercados",
+                reply=" ".join(fragments),
+                suggestions=suggestions,
+                confidence=0.9 if saving_comparisons else 0.78,
+            )
 
         return ListChatAIResponse(
             intent="comparar_lista_supermercados",
             reply=(
-                f"Con los productos actuales, el menor importe acumulado está en {cheapest.get('supermercado')} "
-                f"con {ListChatbotAIService._format_money(cheapest.get('total', 0))}. Desglose: {details}. "
-                "Ojo: esto compara los productos ya elegidos, no una cesta equivalente completa en cada supermercado."
+                "He intentado comparar tus productos con alternativas de otros supermercados, "
+                "pero el catálogo no contiene productos suficientemente parecidos para hacer una recomendación fiable. "
+                "Cuando haya más productos equivalentes entre supermercados, podré decirte cosas como: "
+                "'este producto lo tienes aquí a 4,00 €, pero hay uno muy parecido allí a 3,00 €'."
             ),
             suggestions=[
                 ListChatSuggestion(
-                    type="info",
-                    title="Comparación orientativa",
-                    description="La comparación agrupa el coste de los productos actuales según su supermercado asignado.",
+                    type="warning",
+                    title="Sin equivalencias claras",
+                    description="No hay suficientes productos parecidos entre supermercados para recomendar cambios concretos.",
                 )
             ],
-            confidence=0.9,
+            confidence=0.68,
+        )
+
+    @staticmethod
+    def _format_product_level_comparison(original: dict, alternative: dict) -> str:
+        original_quantity = int(original.get("cantidad") or 0)
+        original_name = original.get("nombre") or "producto de la lista"
+        original_supermarket = original.get("supermercado") or "su supermercado actual"
+        alternative_name = alternative.get("nombre") or "una alternativa parecida"
+        alternative_supermarket = alternative.get("supermercado") or "otro supermercado"
+        ahorro = float(alternative.get("ahorro_estimado") or 0)
+
+        base = (
+            f"Tienes {original_name} en {original_supermarket} a "
+            f"{ListChatbotAIService._format_money(original.get('precio_unitario', 0))} por unidad "
+            f"({ListChatbotAIService._plural(original_quantity, 'unidad', 'unidades')}, "
+            f"subtotal {ListChatbotAIService._format_money(original.get('subtotal', 0))}). "
+            f"Una opción parecida es {alternative_name} en {alternative_supermarket} a "
+            f"{ListChatbotAIService._format_money(alternative.get('precio_unitario', 0))} por unidad; "
+            f"para la misma cantidad saldría por {ListChatbotAIService._format_money(alternative.get('subtotal_estimado', 0))}."
+        )
+
+        if ahorro > 0:
+            return base + f" Ahorro estimado: {ListChatbotAIService._format_money(ahorro)}."
+
+        diferencia = abs(ahorro)
+        if diferencia == 0:
+            return base + " El precio quedaría prácticamente igual."
+
+        return base + f" No sería más barato: saldría aproximadamente {ListChatbotAIService._format_money(diferencia)} más caro."
+
+    @staticmethod
+    def _format_equivalent_basket_ranking(baskets: list[dict]) -> str:
+        return "; ".join(
+            f"{basket.get('supermercado')}: {ListChatbotAIService._format_money(basket.get('total_estimado', 0))}"
+            for basket in baskets
+        )
+
+    @staticmethod
+    def _format_partial_basket_ranking(baskets: list[dict]) -> str:
+        return "; ".join(
+            f"{basket.get('supermercado')}: {ListChatbotAIService._format_money(basket.get('total_estimado', 0))} "
+            f"({basket.get('productos_encontrados')}/{basket.get('productos_totales')} productos)"
+            for basket in baskets
+        )
+
+    @staticmethod
+    def _format_current_supermarket_breakdown(analysis: dict) -> str:
+        breakdown = analysis.get("desglose_supermercados_actual", []) or []
+        if not breakdown:
+            return "sin desglose disponible"
+        return ", ".join(
+            f"{item.get('supermercado')}: {ListChatbotAIService._format_money(item.get('total', 0))}"
+            for item in breakdown
         )
 
     @staticmethod
     def _build_saving_response(analysis: dict) -> ListChatAIResponse:
+        product_comparisons = [
+            comparison
+            for comparison in (analysis.get("comparativa_por_producto", []) or [])
+            if comparison.get("tiene_ahorro")
+        ]
+        if product_comparisons:
+            best = product_comparisons[0]
+            original = best.get("producto_original", {})
+            alternative = best.get("mejor_alternativa_otro_supermercado", {})
+            reply = (
+                "La oportunidad de ahorro más clara que veo está en comparar un producto concreto con otro supermercado. "
+                + ListChatbotAIService._format_product_level_comparison(
+                    original=original,
+                    alternative=alternative,
+                )
+                + " Comprueba que el producto te encaje antes de sustituirlo."
+            )
+            return ListChatAIResponse(
+                intent="sugerir_ahorro",
+                reply=reply,
+                suggestions=[
+                    ListChatSuggestion(
+                        type="saving",
+                        title="Ahorro por sustitución",
+                        description=(
+                            f"{alternative.get('nombre')} en {alternative.get('supermercado')} podría ahorrarte "
+                            f"{ListChatbotAIService._format_money(alternative.get('ahorro_estimado', 0))} frente a {original.get('nombre')}."
+                        ),
+                    )
+                ],
+                confidence=0.9,
+            )
+
         candidates = analysis.get("candidatos_ahorro", [])
         if not candidates:
             return ListChatAIResponse(
