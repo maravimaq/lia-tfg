@@ -17,3 +17,4 @@ from app.models.solicitud_seguimiento import SolicitudSeguimiento
 from app.models.list_chat_message import ListChatMessage
 from app.models.external_bot_session import ExternalBotSession
 from app.models.external_bot_message import ExternalBotMessage
+from app.models.external_bot_link_code import ExternalBotLinkCode

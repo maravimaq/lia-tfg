@@ -14,6 +14,7 @@ from app.repositories.external_bot_message_repository import ExternalBotMessageR
 from app.repositories.external_bot_session_repository import ExternalBotSessionRepository
 from app.repositories.lista_compra_repository import ListaCompraRepository
 from app.repositories.producto_repository import ProductoRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.external_bot import (
     ExternalBotHistoryResponse,
     ExternalBotListOption,
@@ -76,6 +77,10 @@ class ExternalBotService:
         request: ExternalBotMessageRequest,
         current_user: User,
     ) -> ExternalBotMessageResponse:
+        """
+        Endpoint de simulación protegido por JWT.
+        Si no existe sesión para external_chat_id, la crea asociada al usuario autenticado.
+        """
         clean_message = request.message.strip()
         if not clean_message:
             raise HTTPException(
@@ -90,6 +95,71 @@ class ExternalBotService:
             channel=channel,
             external_chat_id=request.external_chat_id.strip(),
         )
+
+        return ExternalBotService._process_message_with_session(
+            db=db,
+            request=request,
+            current_user=current_user,
+            session=session,
+        )
+
+    @staticmethod
+    def process_linked_message(
+        db: Session,
+        request: ExternalBotMessageRequest,
+    ) -> ExternalBotMessageResponse:
+        """
+        Endpoint de simulación sin JWT para probar el comportamiento del futuro webhook.
+        Solo funciona si el external_chat_id ya está vinculado a un usuario de LIA.
+        """
+        clean_message = request.message.strip()
+        if not clean_message:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El mensaje no puede estar vacío",
+            )
+
+        channel = request.channel.upper()
+        session = ExternalBotSessionRepository.get_by_channel_and_chat_id(
+            db=db,
+            channel=channel,
+            external_chat_id=request.external_chat_id.strip(),
+        )
+
+        if not session:
+            return ExternalBotMessageResponse(
+                reply=(
+                    "Este chat todavía no está vinculado a ninguna cuenta de LIA. "
+                    "Abre la app, genera un código de vinculación y envíalo con /start CÓDIGO."
+                ),
+                state="not_linked",
+                channel=channel,
+                external_chat_id=request.external_chat_id.strip(),
+                metadata={"linked": False},
+            )
+
+        current_user = UserRepository.get_by_id(db, session.user_id)
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario vinculado no encontrado.",
+            )
+
+        return ExternalBotService._process_message_with_session(
+            db=db,
+            request=request,
+            current_user=current_user,
+            session=session,
+        )
+
+    @staticmethod
+    def _process_message_with_session(
+        db: Session,
+        request: ExternalBotMessageRequest,
+        current_user: User,
+        session: ExternalBotSession,
+    ) -> ExternalBotMessageResponse:
+        clean_message = request.message.strip()
 
         ExternalBotService._save_message(
             db=db,

@@ -61,3 +61,43 @@ class ExternalBotHistoryResponse(BaseModel):
     channel: str
     state: str
     messages: list[ExternalBotStoredMessage]
+
+
+class ExternalBotGenerateLinkCodeRequest(BaseModel):
+    channel: ExternalBotChannel = "TELEGRAM"
+
+
+class ExternalBotLinkCodeResponse(BaseModel):
+    code: str
+    channel: str
+    expires_at: datetime
+    instructions: str
+
+
+class ExternalBotLinkChatRequest(BaseModel):
+    external_chat_id: str = Field(..., min_length=1)
+    code: str = Field(..., min_length=4)
+    channel: ExternalBotChannel = "TELEGRAM"
+
+
+class ExternalBotLinkChatResponse(BaseModel):
+    reply: str
+    linked: bool
+    channel: str
+    external_chat_id: str
+    user_id: int | None = None
+
+
+class ExternalBotLinkStatusResponse(BaseModel):
+    channel: str
+    linked: bool
+    external_chat_id: str | None = None
+    state: str | None = None
+    last_link_code: str | None = None
+    last_link_code_status: str | None = None
+    last_link_code_expires_at: datetime | None = None
+
+
+class ExternalBotUnlinkResponse(BaseModel):
+    detail: str
+    deleted_sessions: int

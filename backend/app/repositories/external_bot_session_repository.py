@@ -19,6 +19,20 @@ class ExternalBotSessionRepository:
         )
 
     @staticmethod
+    def get_by_user_and_channel(
+        db: Session,
+        user_id: int,
+        channel: str,
+    ) -> list[ExternalBotSession]:
+        return (
+            db.query(ExternalBotSession)
+            .filter(ExternalBotSession.user_id == user_id)
+            .filter(ExternalBotSession.channel == channel)
+            .order_by(ExternalBotSession.fecha_actualizacion.desc())
+            .all()
+        )
+
+    @staticmethod
     def create(db: Session, session: ExternalBotSession) -> ExternalBotSession:
         db.add(session)
         db.commit()
