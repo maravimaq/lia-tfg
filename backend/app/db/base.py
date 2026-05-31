@@ -15,3 +15,5 @@ from app.models.solicitud_baja_usuario import SolicitudBajaUsuario
 from app.models.seguimiento_usuario import SeguimientoUsuario
 from app.models.solicitud_seguimiento import SolicitudSeguimiento
 from app.models.list_chat_message import ListChatMessage
+from app.models.external_bot_session import ExternalBotSession
+from app.models.external_bot_message import ExternalBotMessage
