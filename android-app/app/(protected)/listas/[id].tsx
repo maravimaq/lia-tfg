@@ -569,6 +569,32 @@ export default function DetalleListaScreen() {
               </View>
             )}
 
+            <TouchableOpacity
+              style={styles.aiAssistantButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/listas/chatbot",
+                  params: {
+                    listaId: lista.id_lista.toString(),
+                    nombreLista: lista.nombre_lista,
+                  },
+                })
+              }
+            >
+              <View style={styles.aiAssistantIcon}>
+                <Text style={styles.aiAssistantIconText}>IA</Text>
+              </View>
+
+              <View style={styles.aiAssistantTextBox}>
+                <Text style={styles.aiAssistantTitle}>Asistente de lista</Text>
+                <Text style={styles.aiAssistantSubtitle}>
+                  Analiza importes, cantidades y posibles ahorros.
+                </Text>
+              </View>
+
+              <Text style={styles.aiAssistantArrow}>›</Text>
+            </TouchableOpacity>
+
             {isOwner ? (
               <View style={styles.ownerActions}>
                 <TouchableOpacity
@@ -1148,6 +1174,51 @@ const styles = StyleSheet.create({
   readOnlyText: {
     color: "#92400E",
     lineHeight: 20,
+  },
+  aiAssistantButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    marginBottom: 14,
+  },
+  aiAssistantIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  aiAssistantIconText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  aiAssistantTextBox: {
+    flex: 1,
+  },
+  aiAssistantTitle: {
+    color: Colors.title,
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 3,
+  },
+  aiAssistantSubtitle: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  aiAssistantArrow: {
+    color: Colors.primary,
+    fontSize: 28,
+    fontWeight: "900",
   },
   ownerActions: {
     gap: 10,

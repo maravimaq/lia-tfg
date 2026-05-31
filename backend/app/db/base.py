@@ -14,3 +14,4 @@ from app.models.sesion_autenticacion import SesionAutenticacion
 from app.models.solicitud_baja_usuario import SolicitudBajaUsuario
 from app.models.seguimiento_usuario import SeguimientoUsuario
 from app.models.solicitud_seguimiento import SolicitudSeguimiento
+from app.models.list_chat_message import ListChatMessage

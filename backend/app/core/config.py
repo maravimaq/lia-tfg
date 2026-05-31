@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     password_reset_url: str = "lia://reset-password"
 
+    # IA chatbot
+    # Opciones: "ollama" para IA local gratuita, "openai" para API externa, "mock" para desarrollo sin IA.
+    ai_provider: str = "ollama"
+
+    # Ollama local
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.1:8b"
+    ollama_timeout_seconds: int = 60
+
     # DIA
     dia_cookie: str | None = None
     dia_max_categories: int = 20

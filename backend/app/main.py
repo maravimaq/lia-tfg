@@ -12,6 +12,7 @@ from app.controllers.lista_compartida_controller import router as lista_comparti
 from app.controllers.historial_listas_controller import router as historial_router
 from app.controllers.producto_lista_controller import router as producto_router
 from app.controllers.producto_controller import router as producto_catalogo_router
+from app.controllers.chat_controller import router as chat_router
 
 
 app = FastAPI()
@@ -45,6 +46,7 @@ app.include_router(lista_router)
 app.include_router(historial_router)
 app.include_router(producto_router)
 app.include_router(producto_catalogo_router)
+app.include_router(chat_router)
 
 
 @app.get("/health")
