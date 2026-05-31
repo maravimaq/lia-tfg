@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -76,3 +77,16 @@ class ChatListaResumen(BaseModel):
     nombre_lista: str
     total_estimado: Decimal
     productos: list[ChatProductoListaResumen]
+
+class ListChatStoredMessage(BaseModel):
+    id_chat_message: int
+    lista_id: int
+    usuario_id: int
+    role: Literal["user", "assistant"]
+    content: str
+    intent: ListChatIntent | None = None
+    suggestions: list[ListChatSuggestion] = Field(default_factory=list)
+    context_summary: dict = Field(default_factory=dict)
+    fecha_creacion: datetime
+
+    model_config = ConfigDict(from_attributes=True)

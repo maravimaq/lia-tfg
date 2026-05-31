@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import {
   ListChatIntent,
   ListChatSuggestion,
   ListChatSuggestionType,
+  ListChatStoredMessage,
 } from "@/src/types/chat";
 
 type ChatMessage = {
@@ -39,6 +40,33 @@ const QUICK_PROMPTS = [
 
 function createMessageId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createInitialAssistantMessage(): ChatMessage {
+  return {
+    id: "initial-assistant-message",
+    role: "assistant",
+    content:
+      "Soy el asistente de esta lista. Puedo analizarla, comparar importes por supermercado, revisar cantidades y detectar posibles ahorros.",
+    suggestions: [
+      {
+        type: "info",
+        title: "Consejo",
+        description:
+          "Prueba con: “Analiza mi lista” o “¿Dónde es más barata mi lista?”.",
+      },
+    ],
+  };
+}
+
+function mapStoredMessageToChatMessage(message: ListChatStoredMessage): ChatMessage {
+  return {
+    id: `stored-${message.id_chat_message}`,
+    role: message.role,
+    content: message.content,
+    intent: message.intent ?? undefined,
+    suggestions: message.suggestions ?? [],
+  };
 }
 
 function getSuggestionStyle(type: ListChatSuggestionType) {
@@ -109,26 +137,65 @@ export default function ListaChatbotScreen() {
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "initial-assistant-message",
-      role: "assistant",
-      content:
-        "Soy el asistente de esta lista. Puedo analizarla, comparar importes por supermercado, revisar cantidades y detectar posibles ahorros.",
-      suggestions: [
-        {
-          type: "info",
-          title: "Consejo",
-          description:
-            "Prueba con: “Analiza mi lista” o “¿Dónde es más barata mi lista?”.",
-        },
-      ],
-    },
+    createInitialAssistantMessage(),
   ]);
 
   const canSend = useMemo(() => {
-    return input.trim().length > 0 && !sending && !Number.isNaN(listaId);
-  }, [input, listaId, sending]);
+    return input.trim().length > 0 && !sending && !loadingHistory && !Number.isNaN(listaId);
+  }, [input, listaId, loadingHistory, sending]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadHistory = async () => {
+      if (!listaId || Number.isNaN(listaId)) {
+        setLoadingHistory(false);
+        return;
+      }
+
+      try {
+        const storedMessages = await chatService.getListMessages(listaId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (storedMessages.length > 0) {
+          setMessages(storedMessages.map(mapStoredMessageToChatMessage));
+        } else {
+          setMessages([createInitialAssistantMessage()]);
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (isMounted) {
+          setMessages([
+            createInitialAssistantMessage(),
+            {
+              id: createMessageId(),
+              role: "assistant",
+              content:
+                "No he podido cargar el historial del chat. Puedes seguir usando el asistente igualmente.",
+              isError: true,
+            },
+          ]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingHistory(false);
+          scrollToEnd();
+        }
+      }
+    };
+
+    loadHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [listaId]);
 
   const scrollToEnd = () => {
     setTimeout(() => {
@@ -276,11 +343,13 @@ export default function ListaChatbotScreen() {
         contentContainerStyle={styles.messagesContent}
         onContentSizeChange={scrollToEnd}
         ListFooterComponent={
-          sending ? (
+          loadingHistory || sending ? (
             <View style={[styles.messageBubble, styles.assistantBubble]}>
               <View style={styles.loadingRow}>
                 <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.loadingText}>LIA está analizando...</Text>
+                <Text style={styles.loadingText}>
+                  {loadingHistory ? "Cargando historial..." : "LIA está analizando..."}
+                </Text>
               </View>
             </View>
           ) : null
@@ -295,9 +364,9 @@ export default function ListaChatbotScreen() {
           showsHorizontalScrollIndicator={false}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.quickPrompt, sending && styles.disabledElement]}
+              style={[styles.quickPrompt, (sending || loadingHistory) && styles.disabledElement]}
               onPress={() => handleSend(item)}
-              disabled={sending}
+              disabled={sending || loadingHistory}
             >
               <Text style={styles.quickPromptText}>{item}</Text>
             </TouchableOpacity>
@@ -313,7 +382,7 @@ export default function ListaChatbotScreen() {
           placeholderTextColor={Colors.textMuted}
           style={styles.input}
           multiline
-          editable={!sending}
+          editable={!sending && !loadingHistory}
         />
 
         <TouchableOpacity

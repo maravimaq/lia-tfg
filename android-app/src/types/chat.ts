@@ -41,3 +41,15 @@ export type ListChatMessageResponse = {
   suggestions: ListChatSuggestion[];
   context_summary: ListChatContextSummary;
 };
+
+export type ListChatStoredMessage = {
+  id_chat_message: number;
+  lista_id: number;
+  usuario_id: number;
+  role: "user" | "assistant";
+  content: string;
+  intent?: ListChatIntent | null;
+  suggestions: ListChatSuggestion[];
+  context_summary: ListChatContextSummary;
+  fecha_creacion: string;
+};
