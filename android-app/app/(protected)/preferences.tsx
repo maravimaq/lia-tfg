@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Alert,
   Pressable,
@@ -12,37 +12,71 @@ import { Controller, useForm } from "react-hook-form";
 
 import Screen from "@/src/components/Screen";
 import AppButton from "@/src/components/AppButton";
-import AppInput from "@/src/components/AppInput";
 import { preferencesService } from "@/src/services/preferences";
-import { Colors } from "@/src/constants/colors";
-import { PreferenciasUpdatePayload } from "@/src/types/preferences";
-import { useAuth } from "@/src/hooks/useAuth";
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
+import { PreferenciasFormValues, PreferenciasUpdatePayload } from "@/src/types/preferences";
 
-const LANGUAGE_OPTIONS = ["es", "en"] as const;
-const WEIGHT_OPTIONS = ["kg", "g", "lb"] as const;
-const PRICE_OPTIONS = ["EUR", "USD"] as const;
+const LANGUAGE_OPTIONS = [
+  { value: "es", label: "Español" },
+  { value: "en", label: "Inglés" },
+] as const;
+
+const WEIGHT_OPTIONS = [
+  { value: "kg", label: "kg" },
+  { value: "g", label: "g" },
+  { value: "lb", label: "lb" },
+] as const;
+
+const PRICE_OPTIONS = [
+  { value: "EUR", label: "EUR" },
+  { value: "USD", label: "USD" },
+] as const;
+
+const SUPERMARKET_OPTIONS = [
+  { value: "", label: "Sin favorito" },
+  { value: "Mercadona", label: "Mercadona" },
+  { value: "DIA", label: "DIA" },
+  { value: "Carrefour", label: "Carrefour" },
+  { value: "ALDI", label: "ALDI" },
+  { value: "Alcampo", label: "Alcampo" },
+] as const;
+
+type Option = {
+  value: string;
+  label: string;
+};
 
 type OptionChipGroupProps = {
   label: string;
-  options: readonly string[];
+  options: readonly Option[];
   selected: string;
   onSelect: (value: string) => void;
+  styles: ReturnType<typeof createStyles>;
 };
 
-function OptionChipGroup({ label, options, selected, onSelect }: OptionChipGroupProps) {
+function OptionChipGroup({
+  label,
+  options,
+  selected,
+  onSelect,
+  styles,
+}: OptionChipGroupProps) {
   return (
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.chipsWrap}>
         {options.map((option) => {
-          const active = option === selected;
+          const active = option.value === selected;
           return (
             <Pressable
-              key={option}
-              onPress={() => onSelect(option)}
+              key={option.value || "none"}
+              onPress={() => onSelect(option.value)}
               style={[styles.chip, active && styles.chipActive]}
             >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{option}</Text>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                {option.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -53,32 +87,50 @@ function OptionChipGroup({ label, options, selected, onSelect }: OptionChipGroup
 
 type ToggleRowProps = {
   label: string;
+  description?: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
+  styles: ReturnType<typeof createStyles>;
+  colors: AppColors;
 };
 
-function ToggleRow({ label, value, onValueChange }: ToggleRowProps) {
+function ToggleRow({
+  label,
+  description,
+  value,
+  onValueChange,
+  styles,
+  colors,
+}: ToggleRowProps) {
   return (
     <View style={styles.toggleRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.toggleTextWrap}>
+        <Text style={styles.fieldLabelNoMargin}>{label}</Text>
+        {description ? <Text style={styles.toggleDescription}>{description}</Text> : null}
+      </View>
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: Colors.border, true: Colors.primary }}
-        thumbColor={Colors.white}
+        trackColor={{ false: colors.border, true: colors.primary }}
+        thumbColor={colors.white}
       />
     </View>
   );
 }
 
 export default function PreferencesScreen() {
-  const { signOut } = useAuth();
+  const { colors, isDarkMode, setDarkMode } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, isDarkMode),
+    [colors, isDarkMode]
+  );
+
   const {
     control,
     handleSubmit,
     reset,
     formState: { isSubmitting },
-  } = useForm<PreferenciasUpdatePayload>({
+  } = useForm<PreferenciasFormValues>({
     defaultValues: {
       idioma: "es",
       modo_oscuro: false,
@@ -90,7 +142,7 @@ export default function PreferencesScreen() {
   });
 
   useEffect(() => {
-    const load = async () => {
+    const loadPreferences = async () => {
       try {
         const prefs = await preferencesService.getMyPreferences();
         reset({
@@ -101,6 +153,7 @@ export default function PreferencesScreen() {
           unidad_precio: prefs.unidad_precio,
           supermercado_favorito: prefs.supermercado_favorito ?? "",
         });
+        await setDarkMode(Boolean(prefs.modo_oscuro));
       } catch (error: any) {
         Alert.alert(
           "Error",
@@ -109,18 +162,33 @@ export default function PreferencesScreen() {
       }
     };
 
-    load();
-  }, [reset]);
+    loadPreferences();
+  }, [reset, setDarkMode]);
 
-  const onSubmit = async (values: PreferenciasUpdatePayload) => {
+  const onSubmit = async (values: PreferenciasFormValues) => {
     try {
-      await preferencesService.updateMyPreferences(values);
-      await signOut();
+      const selectedSupermarket = values.supermercado_favorito;
+
+      const payload: PreferenciasUpdatePayload = {
+        ...values,
+        supermercado_favorito: selectedSupermarket ? selectedSupermarket : null,
+      };
+
+      const updatedPreferences = await preferencesService.updateMyPreferences(payload);
+      await setDarkMode(Boolean(updatedPreferences.modo_oscuro));
+
+      reset({
+        idioma: updatedPreferences.idioma,
+        modo_oscuro: updatedPreferences.modo_oscuro,
+        notificaciones: updatedPreferences.notificaciones,
+        unidad_peso: updatedPreferences.unidad_peso,
+        unidad_precio: updatedPreferences.unidad_precio,
+        supermercado_favorito: updatedPreferences.supermercado_favorito ?? "",
+      });
 
       Alert.alert(
         "Preferencias actualizadas",
-        "Por seguridad, inicia sesión de nuevo para aplicar los cambios.",
-        [{ text: "Aceptar", onPress: () => router.replace("/(auth)/sign-in") }]
+        "Tus preferencias se han guardado correctamente."
       );
     } catch (error: any) {
       Alert.alert(
@@ -142,11 +210,12 @@ export default function PreferencesScreen() {
           control={control}
           name="supermercado_favorito"
           render={({ field: { onChange, value } }) => (
-            <AppInput
+            <OptionChipGroup
               label="Supermercado favorito"
-              placeholder="Mercadona"
-              value={value ?? ""}
-              onChangeText={onChange}
+              options={SUPERMARKET_OPTIONS}
+              selected={value ?? ""}
+              onSelect={onChange}
+              styles={styles}
             />
           )}
         />
@@ -158,8 +227,9 @@ export default function PreferencesScreen() {
             <OptionChipGroup
               label="Idioma"
               options={LANGUAGE_OPTIONS}
-              selected={value}
+              selected={value ?? "es"}
               onSelect={onChange}
+              styles={styles}
             />
           )}
         />
@@ -171,8 +241,9 @@ export default function PreferencesScreen() {
             <OptionChipGroup
               label="Unidad de peso"
               options={WEIGHT_OPTIONS}
-              selected={value}
+              selected={value ?? "kg"}
               onSelect={onChange}
+              styles={styles}
             />
           )}
         />
@@ -184,8 +255,9 @@ export default function PreferencesScreen() {
             <OptionChipGroup
               label="Moneda"
               options={PRICE_OPTIONS}
-              selected={value}
+              selected={value ?? "EUR"}
               onSelect={onChange}
+              styles={styles}
             />
           )}
         />
@@ -194,7 +266,14 @@ export default function PreferencesScreen() {
           control={control}
           name="notificaciones"
           render={({ field: { onChange, value } }) => (
-            <ToggleRow label="Notificaciones" value={value} onValueChange={onChange} />
+            <ToggleRow
+              label="Notificaciones"
+              description="Activa o desactiva avisos de la aplicación."
+              value={Boolean(value)}
+              onValueChange={onChange}
+              styles={styles}
+              colors={colors}
+            />
           )}
         />
 
@@ -202,7 +281,14 @@ export default function PreferencesScreen() {
           control={control}
           name="modo_oscuro"
           render={({ field: { onChange, value } }) => (
-            <ToggleRow label="Modo oscuro" value={value} onValueChange={onChange} />
+            <ToggleRow
+              label="Modo oscuro"
+              description="Aplica la preferencia visual a la app."
+              value={Boolean(value)}
+              onValueChange={onChange}
+              styles={styles}
+              colors={colors}
+            />
           )}
         />
       </View>
@@ -224,70 +310,86 @@ export default function PreferencesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    marginBottom: 22,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: Colors.title,
-  },
-  subtitle: {
-    marginTop: 6,
-    color: Colors.textMuted,
-  },
-  card: {
-    backgroundColor: "rgba(255,255,255,0.88)",
-    borderRadius: 24,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-
-  fieldGroup: {
-    marginBottom: 14,
-  },
-  fieldLabel: {
-    marginBottom: 8,
-    color: Colors.title,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  chipsWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chip: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.surface,
-  },
-  chipActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.softBlue,
-  },
-  chipText: {
-    color: Colors.text,
-    fontWeight: "600",
-  },
-  chipTextActive: {
-    color: Colors.title,
-  },
-  toggleRow: {
-    minHeight: 54,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 16,
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 14,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-});
+function createStyles(colors: AppColors, isDarkMode: boolean) {
+  return StyleSheet.create({
+    header: {
+      marginBottom: 22,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: "800",
+      color: colors.title,
+    },
+    subtitle: {
+      marginTop: 6,
+      color: colors.textMuted,
+    },
+    card: {
+      backgroundColor: isDarkMode ? "rgba(27,32,53,0.94)" : "rgba(255,255,255,0.88)",
+      borderRadius: 24,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    fieldGroup: {
+      marginBottom: 14,
+    },
+    fieldLabel: {
+      marginBottom: 8,
+      color: colors.title,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    fieldLabelNoMargin: {
+      color: colors.title,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    chipsWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    chip: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      backgroundColor: colors.surface,
+    },
+    chipActive: {
+      borderColor: colors.primary,
+      backgroundColor: isDarkMode ? colors.card : colors.softBlue,
+    },
+    chipText: {
+      color: colors.text,
+      fontWeight: "600",
+    },
+    chipTextActive: {
+      color: colors.title,
+    },
+    toggleRow: {
+      minHeight: 62,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      backgroundColor: colors.surface,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginBottom: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    toggleTextWrap: {
+      flex: 1,
+    },
+    toggleDescription: {
+      marginTop: 4,
+      color: colors.textMuted,
+      fontSize: 12,
+    },
+  });
+}

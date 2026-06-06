@@ -15,7 +15,8 @@ import ProfileSideMenu from "@/src/components/ProfileSideMenu";
 import AppInput from "@/src/components/AppInput";
 import AppButton from "@/src/components/AppButton";
 import { useAuth } from "@/src/hooks/useAuth";
-import { Colors } from "@/src/constants/colors";
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 import { userService } from "@/src/services/user";
 import { DiscoverUserResponse, IncomingFollowRequestItem } from "@/src/types/user";
 
@@ -35,6 +36,8 @@ function getAvatarFallback(name?: string) {
 
 export default function ProfileScreen() {
   const { user, refreshProfile, signOut, setUser } = useAuth();
+  const { colors, isDarkMode } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
   const [menuVisible, setMenuVisible] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [users, setUsers] = useState<DiscoverUserResponse[]>([]);
@@ -44,8 +47,12 @@ export default function ProfileScreen() {
   const [followingUserId, setFollowingUserId] = useState<number | null>(null);
   const [requestActionId, setRequestActionId] = useState<number | null>(null);
 
-  const loadFriendsData = async (query = "") => {
-    setFriendsLoading(true);
+  const loadFriendsData = async (query = "", options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? false;
+
+    if (showLoading) {
+      setFriendsLoading(true);
+    }
     try {
       const [discovery, incoming] = await Promise.all([
         userService.discoverUsers(query),
@@ -56,13 +63,15 @@ export default function ProfileScreen() {
     } catch (error: any) {
       Alert.alert("Error", error?.response?.data?.detail || "No se pudo cargar la sección de amigos");
     } finally {
-      setFriendsLoading(false);
+      if (showLoading) {
+        setFriendsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     refreshProfile().catch(() => undefined);
-    loadFriendsData().catch(() => undefined);
+    loadFriendsData("", { showLoading: true }).catch(() => undefined);
   }, []);
 
   useFocusEffect(
@@ -334,7 +343,8 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: AppColors, isDarkMode: boolean) {
+  return StyleSheet.create({
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -342,7 +352,7 @@ const styles = StyleSheet.create({
   },
   menuIcon: {
     fontSize: 24,
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "800",
   },
   header: {
@@ -362,12 +372,12 @@ const styles = StyleSheet.create({
     width: 108,
     height: 108,
     borderRadius: 54,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
-    color: Colors.white,
+    color: colors.white,
     fontSize: 30,
     fontWeight: "800",
   },
@@ -378,20 +388,20 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   editBadgeText: {
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "800",
   },
   username: {
     fontSize: 16,
     fontWeight: "700",
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   tabs: {
     flexDirection: "row",
@@ -402,32 +412,32 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 38,
     borderRadius: 20,
-    backgroundColor: Colors.card,
+    backgroundColor: colors.card,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 8,
   },
   tabActive: {
-    backgroundColor: Colors.black,
+    backgroundColor: isDarkMode ? colors.primary : colors.black,
   },
   tabText: {
     fontSize: 12,
-    color: Colors.text,
+    color: colors.text,
     fontWeight: "600",
     textAlign: "center",
   },
   tabTextActive: {
-    color: Colors.white,
+    color: colors.white,
   },
   card: {
-    backgroundColor: "rgba(255,255,255,0.88)",
+    backgroundColor: isDarkMode ? "rgba(27,32,53,0.94)" : "rgba(255,255,255,0.88)",
     borderRadius: 22,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
   },
   label: {
-    color: Colors.title,
+    color: colors.title,
     fontSize: 14,
     fontWeight: "700",
     marginTop: 10,
@@ -437,45 +447,45 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   value: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: 15,
     flex: 1,
     paddingRight: 10,
   },
   editIcon: {
     fontSize: 20,
-    color: Colors.title,
+    color: colors.title,
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     marginVertical: 18,
   },
   friendsTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.title,
+    color: colors.title,
     marginBottom: 4,
   },
   requestCounter: {
     marginBottom: 12,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   requestsBox: {
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     borderRadius: 16,
     padding: 10,
     marginBottom: 12,
-    backgroundColor: Colors.card,
+    backgroundColor: colors.card,
   },
   requestRow: {
     flexDirection: "row",
@@ -493,7 +503,7 @@ const styles = StyleSheet.create({
   },
   emptyFriendsText: {
     textAlign: "center",
-    color: Colors.textMuted,
+    color: colors.textMuted,
     lineHeight: 22,
     marginVertical: 8,
   },
@@ -511,14 +521,15 @@ const styles = StyleSheet.create({
   friendName: {
     fontSize: 14,
     fontWeight: "700",
-    color: Colors.text,
+    color: colors.text,
   },
   friendEmail: {
     fontSize: 12,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   followButton: {
     minHeight: 36,
     minWidth: 88,
   },
-});
+  });
+}

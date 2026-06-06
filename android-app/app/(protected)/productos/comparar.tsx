@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
-import { Colors } from "@/src/constants/colors";
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 import { productosService } from "@/src/services/productos";
 import { Producto } from "@/src/types/producto";
 
@@ -66,6 +67,9 @@ export default function CompararProductosScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const productosAgrupados = useMemo(() => {
     return groupProductosByNombre(productos);
@@ -172,7 +176,13 @@ export default function CompararProductosScreen() {
         keyExtractor={(item, index) => `${item.nombre}-${index}`}
         renderItem={renderProductoComparado}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.surface}
+          />
         }
         ListHeaderComponent={
           <View>
@@ -193,7 +203,7 @@ export default function CompararProductosScreen() {
                 value={nombre}
                 onChangeText={setNombre}
                 placeholder="Buscar producto"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 style={styles.searchInput}
                 returnKeyType="search"
                 onSubmitEditing={handleComparar}
@@ -225,7 +235,7 @@ export default function CompararProductosScreen() {
 
             {loading ? (
               <View style={styles.loadingBox}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.loadingText}>Comparando precios...</Text>
               </View>
             ) : null}
@@ -254,10 +264,10 @@ export default function CompararProductosScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     paddingHorizontal: 20,
     paddingTop: 18,
   },
@@ -278,7 +288,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 36,
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "600",
     marginTop: -4,
   },
@@ -287,7 +297,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 18,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
   },
   headerSpacer: {
     width: 42,
@@ -299,9 +309,9 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     minHeight: 48,
     borderRadius: 999,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: 18,
@@ -310,7 +320,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
     paddingVertical: 10,
   },
@@ -323,7 +333,7 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     fontSize: 24,
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "900",
   },
   searchActions: {
@@ -337,12 +347,12 @@ const styles = StyleSheet.create({
   },
   sectionSubtitle: {
     textAlign: "center",
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: 15,
     marginBottom: 18,
   },
   clearText: {
-    color: Colors.primary,
+    color: colors.primary,
     fontWeight: "900",
   },
   loadingBox: {
@@ -352,18 +362,18 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontWeight: "700",
   },
   resultCard: {
     width: "100%",
     maxWidth: 520,
     alignSelf: "center",
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     marginBottom: 24,
     shadowColor: "#000",
     shadowOpacity: 0.08,
@@ -374,12 +384,12 @@ const styles = StyleSheet.create({
   productGroupTitle: {
     fontSize: 17,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
     marginBottom: 12,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: colors.border,
     marginBottom: 12,
   },
   supermarketRow: {
@@ -394,7 +404,7 @@ const styles = StyleSheet.create({
   },
   productIcon: {
     fontSize: 18,
-    color: Colors.title,
+    color: colors.title,
   },
   supermarketInfo: {
     flex: 1,
@@ -409,15 +419,15 @@ const styles = StyleSheet.create({
   supermarketName: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.text,
+    color: colors.text,
   },
   productMeta: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: 13,
     marginBottom: 2,
   },
   productPrice: {
-    color: Colors.title,
+    color: colors.title,
     fontSize: 15,
     fontWeight: "900",
   },
@@ -436,22 +446,22 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 520,
     alignSelf: "center",
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 22,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     alignItems: "center",
   },
   emptyTitle: {
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "900",
     fontSize: 17,
     marginBottom: 6,
     textAlign: "center",
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     textAlign: "center",
     lineHeight: 20,
   },

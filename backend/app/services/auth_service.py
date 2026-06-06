@@ -1,9 +1,9 @@
-from urllib.parse import quote
+import secrets
+import string
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.external_auth import verify_apple_id_token, verify_google_id_token
 from app.models.sesion_autenticacion import SesionAutenticacion
 from app.models.user import User
@@ -17,9 +17,6 @@ from app.core.security import (
     hash_password,
     verify_password,
     create_access_token,
-    create_password_reset_token,
-    is_password_reset_token,
-    decode_token,
 )
 
 
@@ -233,13 +230,15 @@ class AuthService:
         sesion = SessionRepository.get_active_by_token(db, token)
 
         if sesion is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No existe una sesión activa para este token"
-            )
+            return {"message": "La sesión ya estaba cerrada o revocada"}
 
         SessionRepository.close_session(db, sesion)
         return {"message": "Sesión cerrada correctamente"}
+
+    @staticmethod
+    def _generate_temporary_password(length: int = 12) -> str:
+        alphabet = string.ascii_letters + string.digits
+        return "".join(secrets.choice(alphabet) for _ in range(length))
 
     @staticmethod
     def forgot_password(db: Session, email: str) -> dict:
@@ -256,12 +255,13 @@ class AuthService:
                 detail=f"Esta cuenta usa autenticación externa con {user.proveedor_auth} y no admite recuperación por contraseña local"
             )
 
-        reset_token = create_password_reset_token(user.email)
-        separator = "&" if "?" in settings.password_reset_url else "?"
-        reset_url = f"{settings.password_reset_url}{separator}token={quote(reset_token)}"
+        temporary_password = AuthService._generate_temporary_password()
+        user.contrasena = hash_password(temporary_password)
+        UserRepository.save(db, user)
+        SessionRepository.revoke_all_user_sessions(db, user.id_usuario)
 
         try:
-            EmailService.send_password_reset_email(user.email, reset_url)
+            EmailService.send_temporary_password_email(user.email, temporary_password)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -269,46 +269,15 @@ class AuthService:
             ) from exc
 
         return {
-            "message": "Si el correo existe en el sistema, recibirás instrucciones para restablecer tu contraseña"
+            "message": "Si el correo existe en el sistema, te hemos enviado una contraseña temporal."
         }
 
     @staticmethod
     def reset_password(db: Session, token: str, new_password: str) -> dict:
-        if not is_password_reset_token(token):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Token de recuperación inválido"
-            )
-
-        payload = decode_token(token)
-        email = payload.get("sub")
-
-        if email is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Token de recuperación inválido"
-            )
-
-        user = UserRepository.get_by_email(db, email)
-        if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Usuario no encontrado"
-            )
-
-        if user.proveedor_auth != "local":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Esta cuenta usa autenticación externa con {user.proveedor_auth}"
-            )
-
-        user.contrasena = hash_password(new_password)
-        UserRepository.save(db, user)
-
-        SessionRepository.revoke_all_user_sessions(db, user.id_usuario)
-
-        return {
-            "message": "Contraseña restablecida correctamente. Inicia sesión de nuevo."
-        }
-
-        
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=(
+                "Este flujo ya no usa token de recuperación. "
+                "Solicita una nueva contraseña temporal desde '¿Olvidaste tu contraseña?'."
+            ),
+        )

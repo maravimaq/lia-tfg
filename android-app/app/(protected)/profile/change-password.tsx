@@ -50,7 +50,12 @@ export default function ChangePasswordScreen() {
       });
 
       reset();
-      await signOut();
+
+      try {
+        await signOut();
+      } catch (signOutError) {
+        console.log("Warning al cerrar sesión tras cambiar contraseña:", signOutError);
+      }
 
       Alert.alert(
         "Contraseña actualizada",

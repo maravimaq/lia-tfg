@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -7,22 +7,36 @@ import {
   View,
 } from "react-native";
 import { Redirect, Stack, router, usePathname } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 
 import ProfileSideMenu from "@/src/components/ProfileSideMenu";
-import { Colors } from "@/src/constants/colors";
+import { AppColors } from "@/src/constants/colors";
 import { useAuth } from "@/src/hooks/useAuth";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 
 export default function ProtectedLayout() {
   const { token, loading, user, signOut } = useAuth();
+  const { colors, isDarkMode, refreshThemeFromPreferences, setDarkMode } = useAppTheme();
   const pathname = usePathname();
 
   const [menuVisible, setMenuVisible] = useState(false);
+  const styles = createStyles(colors);
 
   const isProfileScreen = pathname.startsWith("/profile");
+
+  useEffect(() => {
+    if (token) {
+      refreshThemeFromPreferences().catch(() => undefined);
+      return;
+    }
+
+    setDarkMode(false).catch(() => undefined);
+  }, [token, refreshThemeFromPreferences, setDarkMode]);
 
   const handleLogout = async () => {
     try {
       await signOut();
+      await setDarkMode(false);
       router.replace("/(auth)/sign-in");
     } catch (error) {
       console.log("Error al cerrar sesión:", error);
@@ -33,7 +47,8 @@ export default function ProtectedLayout() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -44,6 +59,8 @@ export default function ProtectedLayout() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+
       {!isProfileScreen ? (
         <View style={styles.menuBar}>
           <Pressable
@@ -69,41 +86,43 @@ export default function ProtectedLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  stackContainer: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuBar: {
-    height: 54,
-    backgroundColor: Colors.background,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    paddingRight: 18,
-    paddingTop: 6,
-    zIndex: 10,
-  },
-  menuButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "transparent",
-  },
-  menuIcon: {
-    fontSize: 28,
-    color: Colors.title,
-    fontWeight: "900",
-    lineHeight: 32,
-  },
-});
+function createStyles(colors: AppColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    stackContainer: {
+      flex: 1,
+    },
+    loadingContainer: {
+      flex: 1,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    menuBar: {
+      height: 54,
+      backgroundColor: colors.background,
+      alignItems: "flex-end",
+      justifyContent: "center",
+      paddingRight: 18,
+      paddingTop: 6,
+      zIndex: 10,
+    },
+    menuButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "transparent",
+    },
+    menuIcon: {
+      fontSize: 28,
+      color: colors.title,
+      fontWeight: "900",
+      lineHeight: 32,
+    },
+  });
+}

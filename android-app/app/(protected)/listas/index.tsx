@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
-import { Colors } from "@/src/constants/colors";
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 import { listasService } from "@/src/services/listas";
 import { ListaCompra } from "@/src/types/lista";
 
@@ -70,6 +71,9 @@ export default function ListasScreen() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const listasMostradas = useMemo(() => {
     return activeTab === "propias" ? misListas : listasCompartidas;
@@ -198,7 +202,7 @@ export default function ListasScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Cargando listas...</Text>
       </View>
     );
@@ -211,7 +215,13 @@ export default function ListasScreen() {
         keyExtractor={(item) => item.id_lista.toString()}
         renderItem={renderLista}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.surface}
+          />
         }
         ListHeaderComponent={
           <View>
@@ -270,7 +280,7 @@ export default function ListasScreen() {
                   value={nombreLista}
                   onChangeText={setNombreLista}
                   placeholder="Nombre de la lista"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   style={styles.input}
                   editable={!creating}
                 />
@@ -313,11 +323,11 @@ export default function ListasScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   listContent: {
     paddingBottom: 30,
@@ -326,13 +336,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     padding: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   header: {
     flexDirection: "row",
@@ -344,27 +354,27 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
   },
   subtitle: {
     marginTop: 4,
     fontSize: 14,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     lineHeight: 20,
   },
   catalogButton: {
-    backgroundColor: Colors.black,
+    backgroundColor: colors.black,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 14,
   },
   catalogButtonText: {
-    color: Colors.white,
+    color: colors.white,
     fontWeight: "900",
   },
   tabs: {
     flexDirection: "row",
-    backgroundColor: Colors.card,
+    backgroundColor: colors.card,
     padding: 4,
     borderRadius: 16,
     marginBottom: 16,
@@ -379,61 +389,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   activeTabButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   tabButtonText: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontWeight: "900",
     fontSize: 13,
     textAlign: "center",
   },
   activeTabButtonText: {
-    color: Colors.white,
+    color: colors.white,
   },
   createCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 20,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     marginBottom: 18,
     gap: 12,
   },
   input: {
     minHeight: 46,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     borderRadius: 14,
     paddingHorizontal: 14,
     fontSize: 16,
-    backgroundColor: Colors.white,
-    color: Colors.text,
+    backgroundColor: colors.white,
+    color: colors.text,
   },
   createButton: {
     minHeight: 46,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   createButtonText: {
-    color: Colors.white,
+    color: colors.white,
     fontSize: 15,
     fontWeight: "900",
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
     marginBottom: 12,
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -443,18 +453,18 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
     marginBottom: 6,
   },
   cardText: {
     fontSize: 14,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     marginBottom: 3,
   },
   badge: {
     alignSelf: "flex-start",
     marginTop: 8,
-    backgroundColor: Colors.backgroundAlt,
+    backgroundColor: colors.backgroundAlt,
     borderRadius: 999,
     paddingVertical: 5,
     paddingHorizontal: 10,
@@ -462,7 +472,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: "800",
-    color: Colors.title,
+    color: colors.title,
   },
   editBadge: {
     backgroundColor: "#ECFDF5",
@@ -478,26 +488,26 @@ const styles = StyleSheet.create({
   },
   arrow: {
     fontSize: 32,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     marginLeft: 12,
   },
   emptyBox: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 18,
     padding: 24,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     alignItems: "center",
   },
   emptyTitle: {
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "900",
     fontSize: 17,
     marginBottom: 6,
     textAlign: "center",
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,

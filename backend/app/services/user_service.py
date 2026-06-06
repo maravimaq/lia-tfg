@@ -86,39 +86,28 @@ class UserService:
 
     @staticmethod
     def get_preferences(db: Session, current_user: User) -> PreferenciasUsuario:
-        prefs = PreferencesRepository.get_by_user_id(db, current_user.id_usuario)
-        if prefs is None:
-            prefs = PreferenciasUsuario(usuario_id=current_user.id_usuario)
-            prefs = PreferencesRepository.create(db, prefs)
-        return prefs
+        return PreferencesRepository.get_or_create_by_user_id(
+            db,
+            current_user.id_usuario,
+        )
 
     @staticmethod
     def update_preferences(
         db: Session,
         current_user: User,
         data: PreferenciasUpdate,
-    ) -> dict:
-        prefs = PreferencesRepository.get_by_user_id(db, current_user.id_usuario)
-        if prefs is None:
-            prefs = PreferenciasUsuario(usuario_id=current_user.id_usuario)
+    ) -> PreferenciasUsuario:
+        prefs = PreferencesRepository.get_or_create_by_user_id(
+            db,
+            current_user.id_usuario,
+        )
 
-        prefs.idioma = data.idioma
-        prefs.modo_oscuro = data.modo_oscuro
-        prefs.notificaciones = data.notificaciones
-        prefs.unidad_peso = data.unidad_peso
-        prefs.unidad_precio = data.unidad_precio
-        prefs.supermercado_favorito = data.supermercado_favorito
+        update_data = data.model_dump(exclude_unset=True)
 
-        if prefs.id_preferencia is None:
-            PreferencesRepository.create(db, prefs)
-        else:
-            PreferencesRepository.save(db, prefs)
+        for field, value in update_data.items():
+            setattr(prefs, field, value)
 
-        SessionRepository.revoke_all_user_sessions(db, current_user.id_usuario)
-
-        return {
-            "message": "Preferencias actualizadas correctamente. Inicia sesión de nuevo."
-        }
+        return PreferencesRepository.save(db, prefs)
 
     @staticmethod
     def get_bot_config(db: Session, current_user: User) -> ConfiguracionBotExterno:
