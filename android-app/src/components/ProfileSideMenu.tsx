@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -10,7 +10,8 @@ import {
 import { router } from "expo-router";
 
 import AppButton from "@/src/components/AppButton";
-import { Colors } from "@/src/constants/colors";
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 
 type Props = {
   visible: boolean;
@@ -26,6 +27,7 @@ type MenuItemProps = {
   onPress: () => void;
   danger?: boolean;
   disabled?: boolean;
+  styles: ReturnType<typeof createStyles>;
 };
 
 type ConfirmationAction = "logout" | "delete" | null;
@@ -36,6 +38,7 @@ function MenuItem({
   onPress,
   danger = false,
   disabled = false,
+  styles,
 }: MenuItemProps) {
   return (
     <Pressable
@@ -62,6 +65,11 @@ export default function ProfileSideMenu({
   onDeleteAccount,
   isAdmin = false,
 }: Props) {
+  const { colors, isDarkMode } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, isDarkMode),
+    [colors, isDarkMode]
+  );
   const [confirmationAction, setConfirmationAction] =
     useState<ConfirmationAction>(null);
   const [processing, setProcessing] = useState(false);
@@ -184,30 +192,35 @@ export default function ProfileSideMenu({
                   icon="⚙"
                   label="Configuración Bot Externo"
                   onPress={() => goTo("/(protected)/profile/bot-config")}
+                  styles={styles}
                 />
 
                 <MenuItem
                   icon="?"
                   label="FAQ"
                   onPress={() => goTo("/(protected)/profile/faq")}
+                  styles={styles}
                 />
 
                 <MenuItem
                   icon="i"
                   label="Sobre LIA"
                   onPress={() => goTo("/(protected)/profile/about")}
+                  styles={styles}
                 />
 
                 <MenuItem
                   icon="○"
                   label="Ayuda y Soporte"
                   onPress={() => goTo("/(protected)/profile/support")}
+                  styles={styles}
                 />
 
                 <MenuItem
                   icon="✉"
                   label="Información de Contacto"
                   onPress={() => goTo("/(protected)/profile/contact-info")}
+                  styles={styles}
                 />
 
                 <View style={styles.separator} />
@@ -216,18 +229,21 @@ export default function ProfileSideMenu({
                   icon="☷"
                   label="Mis Listas Pendientes"
                   onPress={() => goTo("/listas")}
+                  styles={styles}
                 />
 
                 <MenuItem
                   icon="☷"
                   label="Historial de Listas"
                   onPress={() => goTo("/historial")}
+                  styles={styles}
                 />
 
                 <MenuItem
                   icon="%"
                   label="Comparador Precios"
                   onPress={() => goTo("/productos/comparar")}
+                  styles={styles}
                 />
 
                 {isAdmin ? (
@@ -235,6 +251,7 @@ export default function ProfileSideMenu({
                     icon="▦"
                     label="Panel Admin"
                     onPress={() => goTo("/(protected)/admin")}
+                    styles={styles}
                   />
                 ) : null}
 
@@ -242,6 +259,7 @@ export default function ProfileSideMenu({
                   icon="◉"
                   label="Mi perfil"
                   onPress={() => goTo("/(protected)/profile")}
+                  styles={styles}
                 />
 
                 <View style={styles.separator} />
@@ -251,6 +269,7 @@ export default function ProfileSideMenu({
                   label="Cerrar Sesión"
                   onPress={() => setConfirmationAction("logout")}
                   danger
+                  styles={styles}
                 />
 
                 <View style={styles.smallSeparator} />
@@ -260,6 +279,7 @@ export default function ProfileSideMenu({
                   label="Eliminar Cuenta"
                   onPress={() => setConfirmationAction("delete")}
                   danger
+                  styles={styles}
                 />
               </ScrollView>
 
@@ -274,132 +294,134 @@ export default function ProfileSideMenu({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: "rgba(0, 0, 0, 0.12)",
-  },
-  backdrop: {
-    flex: 1,
-  },
-  panel: {
-    width: 220,
-    backgroundColor: "#E5E5E5",
-    borderLeftWidth: 1,
-    borderLeftColor: "#D0D0D0",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: -3, height: 0 },
-    elevation: 8,
-  },
-  closeRow: {
-    alignItems: "flex-end",
-    paddingTop: 14,
-    paddingRight: 14,
-    paddingBottom: 6,
-  },
-  closeButton: {
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  close: {
-    fontSize: 36,
-    color: "#222222",
-    fontWeight: "700",
-    lineHeight: 36,
-  },
-  scrollContent: {
-    paddingBottom: 12,
-  },
-  item: {
-    minHeight: 48,
-    paddingRight: 12,
-    paddingLeft: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconBox: {
-    width: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-  },
-  icon: {
-    fontSize: 28,
-    color: "#222222",
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  disabledItem: {
-    opacity: 0.5,
-  },
-  itemText: {
-    flex: 1,
-    color: "#2D2D2D",
-    fontSize: 15,
-    lineHeight: 20,
-    textAlign: "right",
-    fontWeight: "500",
-  },
-  dangerText: {
-    color: "#E51D2A",
-  },
-  separator: {
-    height: 1,
-    backgroundColor: "#CFCFCF",
-    marginVertical: 8,
-    marginLeft: 58,
-    marginRight: 12,
-  },
-  smallSeparator: {
-    height: 1,
-    backgroundColor: "#CFCFCF",
-    marginVertical: 4,
-    marginLeft: 58,
-    marginRight: 12,
-  },
-  footerBox: {
-    borderTopWidth: 1,
-    borderTopColor: "#CFCFCF",
-    paddingTop: 10,
-    paddingBottom: 14,
-    paddingHorizontal: 12,
-  },
-  confirmationBox: {
-    margin: 12,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.card,
-    padding: 14,
-  },
-  confirmationTitle: {
-    color: Colors.title,
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  confirmationText: {
-    color: Colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 14,
-  },
-  confirmationActions: {
-    gap: 8,
-  },
-  confirmationButton: {
-    minHeight: 46,
-  },
-  footer: {
-    color: "#777777",
-    fontSize: 11,
-    textAlign: "center",
-    fontWeight: "700",
-    letterSpacing: 0.4,
-  },
-});
+function createStyles(colors: AppColors, isDarkMode: boolean) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      flexDirection: "row",
+      backgroundColor: isDarkMode ? "rgba(0, 0, 0, 0.42)" : "rgba(0, 0, 0, 0.12)",
+    },
+    backdrop: {
+      flex: 1,
+    },
+    panel: {
+      width: 220,
+      backgroundColor: colors.surface,
+      borderLeftWidth: 1,
+      borderLeftColor: colors.border,
+      shadowColor: "#000",
+      shadowOpacity: isDarkMode ? 0.34 : 0.18,
+      shadowRadius: 10,
+      shadowOffset: { width: -3, height: 0 },
+      elevation: 8,
+    },
+    closeRow: {
+      alignItems: "flex-end",
+      paddingTop: 14,
+      paddingRight: 14,
+      paddingBottom: 6,
+    },
+    closeButton: {
+      width: 34,
+      height: 34,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    close: {
+      fontSize: 36,
+      color: colors.title,
+      fontWeight: "700",
+      lineHeight: 36,
+    },
+    scrollContent: {
+      paddingBottom: 12,
+    },
+    item: {
+      minHeight: 48,
+      paddingRight: 12,
+      paddingLeft: 12,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    iconBox: {
+      width: 42,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 8,
+    },
+    icon: {
+      fontSize: 28,
+      color: colors.title,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    disabledItem: {
+      opacity: 0.5,
+    },
+    itemText: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 15,
+      lineHeight: 20,
+      textAlign: "right",
+      fontWeight: "500",
+    },
+    dangerText: {
+      color: colors.danger,
+    },
+    separator: {
+      height: 1,
+      backgroundColor: colors.border,
+      marginVertical: 8,
+      marginLeft: 58,
+      marginRight: 12,
+    },
+    smallSeparator: {
+      height: 1,
+      backgroundColor: colors.border,
+      marginVertical: 4,
+      marginLeft: 58,
+      marginRight: 12,
+    },
+    footerBox: {
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      paddingTop: 10,
+      paddingBottom: 14,
+      paddingHorizontal: 12,
+    },
+    confirmationBox: {
+      margin: 12,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      padding: 14,
+    },
+    confirmationTitle: {
+      color: colors.title,
+      fontSize: 20,
+      fontWeight: "800",
+      marginBottom: 8,
+    },
+    confirmationText: {
+      color: colors.text,
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 14,
+    },
+    confirmationActions: {
+      gap: 8,
+    },
+    confirmationButton: {
+      minHeight: 46,
+    },
+    footer: {
+      color: colors.textMuted,
+      fontSize: 11,
+      textAlign: "center",
+      fontWeight: "700",
+      letterSpacing: 0.4,
+    },
+  });
+}

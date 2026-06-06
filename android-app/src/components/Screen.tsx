@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -7,7 +7,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Colors } from "@/src/constants/colors";
+
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 
 export default function Screen({
   children,
@@ -16,6 +18,12 @@ export default function Screen({
   children: React.ReactNode;
   scroll?: boolean;
 }) {
+  const { colors, isDarkMode } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, isDarkMode),
+    [colors, isDarkMode]
+  );
+
   const content = (
     <View style={styles.content}>
       <View style={styles.blobTopLeft} />
@@ -47,52 +55,54 @@ export default function Screen({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  scroll: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 22,
-    paddingVertical: 20,
-    backgroundColor: Colors.background,
-    overflow: "hidden",
-  },
-  blobTopLeft: {
-    position: "absolute",
-    top: -40,
-    left: -40,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: Colors.cyan,
-    opacity: 0.18,
-  },
-  blobTopRight: {
-    position: "absolute",
-    top: 40,
-    right: -60,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: Colors.lightPurple,
-    opacity: 0.15,
-  },
-  blobBottom: {
-    position: "absolute",
-    bottom: -80,
-    left: 40,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: Colors.softBlue,
-    opacity: 0.18,
-  },
-});
+function createStyles(colors: AppColors, isDarkMode: boolean) {
+  return StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    flex: {
+      flex: 1,
+    },
+    scroll: {
+      flexGrow: 1,
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: 22,
+      paddingVertical: 20,
+      backgroundColor: colors.background,
+      overflow: "hidden",
+    },
+    blobTopLeft: {
+      position: "absolute",
+      top: -40,
+      left: -40,
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor: colors.cyan,
+      opacity: isDarkMode ? 0.09 : 0.18,
+    },
+    blobTopRight: {
+      position: "absolute",
+      top: 40,
+      right: -60,
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor: colors.lightPurple,
+      opacity: isDarkMode ? 0.1 : 0.15,
+    },
+    blobBottom: {
+      position: "absolute",
+      bottom: -80,
+      left: 40,
+      width: 240,
+      height: 240,
+      borderRadius: 120,
+      backgroundColor: colors.softBlue,
+      opacity: isDarkMode ? 0.14 : 0.18,
+    },
+  });
+}

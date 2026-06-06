@@ -8,12 +8,20 @@ class PreferenciasUsuario(Base):
     __tablename__ = "preferencias_usuario"
 
     id_preferencia = Column(Integer, primary_key=True, index=True)
-    idioma = Column(String, nullable=False, default="es")
+
+    idioma = Column(String(10), nullable=False, default="es")
     modo_oscuro = Column(Boolean, nullable=False, default=False)
     notificaciones = Column(Boolean, nullable=False, default=True)
-    unidad_peso = Column(String, nullable=False, default="kg")
-    unidad_precio = Column(String, nullable=False, default="EUR")
-    supermercado_favorito = Column(String, nullable=True)
+    unidad_peso = Column(String(10), nullable=False, default="kg")
+    unidad_precio = Column(String(10), nullable=False, default="EUR")
+    supermercado_favorito = Column(String(100), nullable=True)
 
-    usuario_id = Column(Integer, ForeignKey("users.id_usuario"), unique=True, nullable=False)
+    usuario_id = Column(
+        Integer,
+        ForeignKey("users.id_usuario", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
     usuario = relationship("User", back_populates="preferencias")
