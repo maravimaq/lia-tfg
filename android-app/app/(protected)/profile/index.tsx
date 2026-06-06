@@ -221,9 +221,9 @@ export default function ProfileScreen() {
           <Text style={styles.tabText}>Preferencias</Text>
         </Pressable>
 
-        <View style={styles.tab}>
+        <Pressable style={styles.tab} onPress={() => router.push("/(protected)/analytics")}>
           <Text style={styles.tabText}>Analíticas</Text>
-        </View>
+        </Pressable>
       </View>
 
       <View style={styles.card}>

@@ -14,6 +14,7 @@ from app.models.user import User
 from app.repositories.producto_repository import ProductoRepository
 from app.core.config import settings
 from app.schemas.chat import ListChatMessageRequest, ListChatMessageResponse
+from app.services.analytics_service import AnalyticsService
 from app.services.chatbot_ai_service import ListChatbotAIService
 from app.services.lista_compra_service import ListaCompraService
 
@@ -88,7 +89,7 @@ class ListChatbotService:
         current_user: User,
     ) -> ListChatMessageResponse:
         lista = ListaCompraService.get_lista_detalle(db, lista_id, current_user)
-        list_context = ListChatbotService._build_list_context(db, lista)
+        list_context = ListChatbotService._build_list_context(db, lista, current_user)
 
         ai_response = ListChatbotAIService.generate_response(
             user_message=request.message.strip(),
@@ -110,7 +111,7 @@ class ListChatbotService:
         )
 
     @staticmethod
-    def _build_list_context(db: Session, lista) -> dict[str, Any]:
+    def _build_list_context(db: Session, lista, current_user: User | None = None) -> dict[str, Any]:
         productos_lista: list[ProductoLista] = getattr(lista, "productos", [])
 
         productos_contexto: list[dict[str, Any]] = []
@@ -298,6 +299,14 @@ class ListChatbotService:
             reverse=True,
         )[: ListChatbotService.MAX_PRODUCT_LEVEL_COMPARISONS]
 
+        historico_usuario = None
+        if current_user is not None:
+            historico_usuario = AnalyticsService.build_chatbot_analytics_context(
+                db=db,
+                current_user=current_user,
+                productos_lista=productos_lista,
+            )
+
         return {
             "lista": {
                 "id_lista": lista.id_lista,
@@ -305,6 +314,7 @@ class ListChatbotService:
                 "total_estimado": float(total_lista),
             },
             "productos": productos_contexto,
+            "historico_usuario": historico_usuario,
             "analisis_precalculado": {
                 "num_productos": len(productos_contexto),
                 "desglose_supermercados_actual": desglose_supermercados,
@@ -332,7 +342,10 @@ class ListChatbotService:
                 "instrucciones_para_ia": (
                     "Usa primero analisis_precalculado. Para comparar supermercados, prioriza "
                     "comparativa_por_producto: el usuario quiere saber si hay productos concretos muy parecidos "
-                    "más baratos en otros supermercados. Cita productos, cantidades y precios concretos."
+                    "más baratos en otros supermercados. Para preguntas de cantidades, usa historico_usuario: "
+                    "compara la cantidad actual con la media mensual, la cantidad ya comprada este mes, "
+                    "el porcentaje del mes transcurrido y la cantidad esperada restante. Cita siempre que "
+                    "las cantidades históricas son unidades registradas si no se conoce el peso exacto."
                 ),
             },
         }
