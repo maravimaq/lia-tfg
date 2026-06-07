@@ -14,6 +14,7 @@ from app.controllers.producto_lista_controller import router as producto_router
 from app.controllers.producto_controller import router as producto_catalogo_router
 from app.controllers.chat_controller import router as chat_router
 from app.controllers.analytics_controller import router as analytics_router
+from app.controllers.external_bot_controller import router as external_bot_router
 
 
 app = FastAPI()
@@ -49,6 +50,7 @@ app.include_router(producto_router)
 app.include_router(producto_catalogo_router)
 app.include_router(chat_router)
 app.include_router(analytics_router)
+app.include_router(external_bot_router)
 
 
 @app.get("/health")

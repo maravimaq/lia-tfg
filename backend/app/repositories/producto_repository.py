@@ -1,4 +1,4 @@
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.producto import Producto
@@ -77,6 +77,12 @@ class ProductoRepository:
         if not clean_text:
             return []
 
+        lowered_text = clean_text.lower()
+        name_lower = func.lower(Producto.nombre)
+        brand_lower = func.lower(Producto.marca)
+        category_lower = func.lower(Producto.categoria)
+        supermarket_lower = func.lower(Producto.supermercado)
+
         query = db.query(Producto).filter(
             or_(
                 Producto.nombre.ilike(f"%{clean_text}%"),
@@ -86,9 +92,22 @@ class ProductoRepository:
             )
         )
 
-        if orden_precio == "asc":
-            query = query.order_by(Producto.precio_unitario.asc())
-        elif orden_precio == "desc":
-            query = query.order_by(Producto.precio_unitario.desc())
+        # Ordenamos por relevancia antes que por precio.
+        # Ejemplo: para "leche" deben salir antes "Leche semidesnatada"
+        # que productos secundarios como "Café con leche".
+        relevance = case(
+            (name_lower == lowered_text, 0),
+            (name_lower.like(f"{lowered_text}%"), 1),
+            (name_lower.like(f"% {lowered_text}%"), 2),
+            (category_lower.like(f"%{lowered_text}%"), 3),
+            (brand_lower.like(f"%{lowered_text}%"), 4),
+            (supermarket_lower.like(f"%{lowered_text}%"), 5),
+            else_=6,
+        )
+
+        if orden_precio == "desc":
+            query = query.order_by(relevance.asc(), Producto.precio_unitario.desc())
+        else:
+            query = query.order_by(relevance.asc(), Producto.precio_unitario.asc())
 
         return query.limit(limit).all()

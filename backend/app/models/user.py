@@ -4,6 +4,7 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
+from app.models.role import Role  # noqa: F401  # necesario para resolver relationship("Role") en procesos externos
 
 
 class User(Base):
@@ -74,3 +75,16 @@ class User(Base):
         back_populates="destinatario",
         cascade="all, delete-orphan",
     )
+
+    external_bot_link_codes = relationship(
+        "ExternalBotLinkCode",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+    )
+
+    external_bot_sessions = relationship(
+        "ExternalBotSession",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+    )
+
