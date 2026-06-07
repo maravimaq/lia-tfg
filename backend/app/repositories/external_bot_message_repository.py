@@ -19,8 +19,8 @@ class ExternalBotMessageRepository:
     ) -> list[ExternalBotMessage]:
         return (
             db.query(ExternalBotMessage)
-            .filter(ExternalBotMessage.session_id == session_id)
-            .order_by(ExternalBotMessage.fecha_creacion.asc())
+            .filter(ExternalBotMessage.sesion_id == session_id)
+            .order_by(ExternalBotMessage.fecha_creacion.desc())
             .limit(limit)
             .all()
         )

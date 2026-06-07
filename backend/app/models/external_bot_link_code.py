@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -9,14 +9,12 @@ from app.db.session import Base
 class ExternalBotLinkCode(Base):
     __tablename__ = "external_bot_link_codes"
 
-    id_external_bot_link_code = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id_usuario"), nullable=False, index=True)
-    channel = Column(String, nullable=False, default="TELEGRAM", index=True)
-    code = Column(String, nullable=False, index=True)
-    estado = Column(String, nullable=False, default="pendiente", index=True)
-    external_chat_id = Column(String, nullable=True, index=True)
+    id_codigo = Column(Integer, primary_key=True, index=True)
+    codigo = Column(String(16), nullable=False, unique=True, index=True)
+    plataforma = Column(String(32), nullable=False, default="telegram")
+    usado = Column(Boolean, nullable=False, default=False)
     fecha_creacion = Column(DateTime, nullable=False, default=datetime.utcnow)
-    expires_at = Column(DateTime, nullable=False)
-    used_at = Column(DateTime, nullable=True)
+    fecha_expiracion = Column(DateTime, nullable=False)
 
-    usuario = relationship("User")
+    usuario_id = Column(Integer, ForeignKey("users.id_usuario"), nullable=False)
+    usuario = relationship("User", back_populates="external_bot_link_codes")

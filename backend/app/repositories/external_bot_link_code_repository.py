@@ -7,71 +7,6 @@ from app.models.external_bot_link_code import ExternalBotLinkCode
 
 class ExternalBotLinkCodeRepository:
     @staticmethod
-    def get_by_code(
-        db: Session,
-        channel: str,
-        code: str,
-    ) -> ExternalBotLinkCode | None:
-        return (
-            db.query(ExternalBotLinkCode)
-            .filter(ExternalBotLinkCode.channel == channel)
-            .filter(ExternalBotLinkCode.code == code)
-            .first()
-        )
-
-    @staticmethod
-    def get_active_by_code(
-        db: Session,
-        channel: str,
-        code: str,
-        now: datetime,
-    ) -> ExternalBotLinkCode | None:
-        return (
-            db.query(ExternalBotLinkCode)
-            .filter(ExternalBotLinkCode.channel == channel)
-            .filter(ExternalBotLinkCode.code == code)
-            .filter(ExternalBotLinkCode.estado == "pendiente")
-            .filter(ExternalBotLinkCode.expires_at > now)
-            .first()
-        )
-
-    @staticmethod
-    def get_latest_by_user_and_channel(
-        db: Session,
-        user_id: int,
-        channel: str,
-    ) -> ExternalBotLinkCode | None:
-        return (
-            db.query(ExternalBotLinkCode)
-            .filter(ExternalBotLinkCode.user_id == user_id)
-            .filter(ExternalBotLinkCode.channel == channel)
-            .order_by(ExternalBotLinkCode.fecha_creacion.desc())
-            .first()
-        )
-
-    @staticmethod
-    def expire_pending_by_user_and_channel(
-        db: Session,
-        user_id: int,
-        channel: str,
-        now: datetime,
-    ) -> None:
-        pending_codes = (
-            db.query(ExternalBotLinkCode)
-            .filter(ExternalBotLinkCode.user_id == user_id)
-            .filter(ExternalBotLinkCode.channel == channel)
-            .filter(ExternalBotLinkCode.estado == "pendiente")
-            .all()
-        )
-
-        for link_code in pending_codes:
-            link_code.estado = "expirado"
-            link_code.expires_at = min(link_code.expires_at, now)
-            db.add(link_code)
-
-        db.commit()
-
-    @staticmethod
     def create(db: Session, link_code: ExternalBotLinkCode) -> ExternalBotLinkCode:
         db.add(link_code)
         db.commit()
@@ -79,8 +14,43 @@ class ExternalBotLinkCodeRepository:
         return link_code
 
     @staticmethod
-    def save(db: Session, link_code: ExternalBotLinkCode) -> ExternalBotLinkCode:
-        db.add(link_code)
+    def get_valid_by_code(
+        db: Session,
+        codigo: str,
+        plataforma: str | None = None,
+    ) -> ExternalBotLinkCode | None:
+        query = db.query(ExternalBotLinkCode).filter(
+            ExternalBotLinkCode.codigo == codigo.upper().strip(),
+            ExternalBotLinkCode.usado.is_(False),
+            ExternalBotLinkCode.fecha_expiracion > datetime.utcnow(),
+        )
+
+        if plataforma:
+            query = query.filter(ExternalBotLinkCode.plataforma == plataforma)
+
+        return query.first()
+
+    @staticmethod
+    def mark_as_used(db: Session, link_code: ExternalBotLinkCode) -> ExternalBotLinkCode:
+        link_code.usado = True
         db.commit()
         db.refresh(link_code)
         return link_code
+
+    @staticmethod
+    def get_latest_active_by_user(
+        db: Session,
+        user_id: int,
+        plataforma: str = "telegram",
+    ) -> ExternalBotLinkCode | None:
+        return (
+            db.query(ExternalBotLinkCode)
+            .filter(
+                ExternalBotLinkCode.usuario_id == user_id,
+                ExternalBotLinkCode.plataforma == plataforma,
+                ExternalBotLinkCode.usado.is_(False),
+                ExternalBotLinkCode.fecha_expiracion > datetime.utcnow(),
+            )
+            .order_by(ExternalBotLinkCode.fecha_creacion.desc())
+            .first()
+        )

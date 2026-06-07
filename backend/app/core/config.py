@@ -26,13 +26,20 @@ class Settings(BaseSettings):
     password_reset_url: str = "lia://reset-password"
 
     # IA chatbot
-    # Opciones: "ollama" para IA local gratuita, "mock" para desarrollo sin IA.
+    # Opciones: "ollama" para IA local gratuita, "openai" si se configura clave, "mock" para desarrollo.
     ai_provider: str = "ollama"
+    openai_api_key: str | None = None
 
     # Ollama local
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.1:8b"
-    ollama_timeout_seconds: int = 60
+    ollama_model: str = "llama3.2:3b"
+    ollama_timeout_seconds: int = 300
+
+    # Telegram bot externo real
+    telegram_bot_token: str | None = None
+    telegram_webhook_base_url: str | None = None
+    telegram_webhook_secret: str | None = None
+    telegram_request_timeout_seconds: int = 10
 
     # DIA
     dia_cookie: str | None = None

@@ -1,35 +1,39 @@
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.external_bot_session import ExternalBotSession
 
 
 class ExternalBotSessionRepository:
     @staticmethod
-    def get_by_channel_and_chat_id(
+    def get_by_external_user(
         db: Session,
-        channel: str,
-        external_chat_id: str,
+        plataforma: str,
+        external_user_id: str,
     ) -> ExternalBotSession | None:
         return (
             db.query(ExternalBotSession)
-            .filter(ExternalBotSession.channel == channel)
-            .filter(ExternalBotSession.external_chat_id == external_chat_id)
+            .filter(
+                ExternalBotSession.plataforma == plataforma,
+                ExternalBotSession.external_user_id == str(external_user_id),
+            )
             .first()
         )
 
     @staticmethod
-    def get_by_user_and_channel(
+    def get_active_by_user(
         db: Session,
         user_id: int,
-        channel: str,
-    ) -> list[ExternalBotSession]:
+        plataforma: str = "telegram",
+    ) -> ExternalBotSession | None:
         return (
             db.query(ExternalBotSession)
-            .filter(ExternalBotSession.user_id == user_id)
-            .filter(ExternalBotSession.channel == channel)
+            .filter(
+                ExternalBotSession.usuario_id == user_id,
+                ExternalBotSession.plataforma == plataforma,
+                ExternalBotSession.activo.is_(True),
+            )
             .order_by(ExternalBotSession.fecha_actualizacion.desc())
-            .all()
+            .first()
         )
 
     @staticmethod
@@ -41,14 +45,6 @@ class ExternalBotSessionRepository:
 
     @staticmethod
     def save(db: Session, session: ExternalBotSession) -> ExternalBotSession:
-        if session.pending_action_json is not None:
-            flag_modified(session, "pending_action_json")
-        db.add(session)
         db.commit()
         db.refresh(session)
         return session
-
-    @staticmethod
-    def delete(db: Session, session: ExternalBotSession) -> None:
-        db.delete(session)
-        db.commit()
