@@ -1,13 +1,16 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   ViewStyle,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Colors } from "@/src/constants/colors";
+
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 
 type Props = {
   title: string;
@@ -15,7 +18,7 @@ type Props = {
   loading?: boolean;
   disabled?: boolean;
   variant?: "primary" | "secondary" | "ghost" | "danger";
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 };
 
 export default function AppButton({
@@ -26,19 +29,24 @@ export default function AppButton({
   variant = "primary",
   style,
 }: Props) {
+  const { colors, isDarkMode } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, isDarkMode),
+    [colors, isDarkMode]
+  );
   const isDisabled = disabled || loading;
 
   if (variant === "primary") {
     return (
       <Pressable onPress={onPress} disabled={isDisabled} style={[style, isDisabled && styles.disabled]}>
         <LinearGradient
-          colors={[Colors.blue, Colors.primary, Colors.lightPurple]}
+          colors={[colors.blue, colors.primary, colors.lightPurple]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.gradientButton}
         >
           {loading ? (
-            <ActivityIndicator color={Colors.white} />
+            <ActivityIndicator color={colors.white} />
           ) : (
             <Text style={styles.primaryText}>{title}</Text>
           )}
@@ -61,7 +69,7 @@ export default function AppButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "ghost" ? Colors.primary : Colors.white} />
+        <ActivityIndicator color={variant === "ghost" ? colors.primary : colors.white} />
       ) : (
         <Text
           style={[
@@ -76,46 +84,50 @@ export default function AppButton({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    minHeight: 54,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  gradientButton: {
-    minHeight: 54,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  secondary: {
-    backgroundColor: Colors.softBlue,
-  },
-  ghost: {
-    backgroundColor: "transparent",
-  },
-  danger: {
-    backgroundColor: Colors.danger,
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-  text: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  primaryText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  ghostText: {
-    color: Colors.primary,
-    fontWeight: "700",
-  },
-});
+function createStyles(colors: AppColors, isDarkMode: boolean) {
+  return StyleSheet.create({
+    base: {
+      minHeight: 54,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 16,
+    },
+    gradientButton: {
+      minHeight: 54,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 16,
+    },
+    secondary: {
+      backgroundColor: isDarkMode ? colors.card : colors.softBlue,
+      borderWidth: isDarkMode ? 1 : 0,
+      borderColor: colors.border,
+    },
+    ghost: {
+      backgroundColor: "transparent",
+    },
+    danger: {
+      backgroundColor: colors.danger,
+    },
+    disabled: {
+      opacity: 0.6,
+    },
+    text: {
+      color: colors.white,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    primaryText: {
+      color: colors.white,
+      fontSize: 16,
+      fontWeight: "800",
+      letterSpacing: 0.2,
+    },
+    ghostText: {
+      color: colors.primary,
+      fontWeight: "700",
+    },
+  });
+}

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +11,8 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
-import { Colors } from "@/src/constants/colors";
+import { AppColors } from "@/src/constants/colors";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 import { historialService } from "@/src/services/historial";
 import { HistorialLista } from "@/src/types/historial";
 
@@ -54,6 +55,9 @@ export default function HistorialScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const loadHistorial = useCallback(async () => {
     try {
       const data = await historialService.getMiHistorial();
@@ -91,7 +95,7 @@ export default function HistorialScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Cargando historial...</Text>
       </View>
     );
@@ -103,7 +107,13 @@ export default function HistorialScreen() {
         data={historial}
         keyExtractor={(item) => item.id_historial.toString()}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.surface}
+          />
         }
         contentContainerStyle={[
           styles.listContent,
@@ -184,11 +194,11 @@ export default function HistorialScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: AppColors) => StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   listContent: {
     paddingBottom: 30,
@@ -200,13 +210,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     padding: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   backButton: {
     marginBottom: 16,
@@ -214,34 +224,34 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: "800",
-    color: Colors.title,
+    color: colors.title,
   },
   headerCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 22,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     marginBottom: 18,
   },
   title: {
     fontSize: 30,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 15,
-    color: Colors.textMuted,
+    color: colors.textMuted,
     lineHeight: 21,
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -262,11 +272,11 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
     marginBottom: 4,
   },
   cardDate: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -288,57 +298,57 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   metaPill: {
-    backgroundColor: Colors.backgroundAlt,
+    backgroundColor: colors.backgroundAlt,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
   metaPillText: {
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "800",
     fontSize: 12,
   },
   total: {
     fontSize: 18,
     fontWeight: "900",
-    color: Colors.title,
+    color: colors.title,
   },
   arrow: {
     fontSize: 32,
-    color: Colors.textMuted,
+    color: colors.textMuted,
   },
   emptyBox: {
     flex: 1,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 18,
     padding: 24,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   emptyTitle: {
-    color: Colors.title,
+    color: colors.title,
     fontWeight: "900",
     fontSize: 18,
     marginBottom: 8,
     textAlign: "center",
   },
   emptyText: {
-    color: Colors.textMuted,
+    color: colors.textMuted,
     fontSize: 15,
     textAlign: "center",
     lineHeight: 21,
     marginBottom: 18,
   },
   emptyButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 18,
   },
   emptyButtonText: {
-    color: Colors.white,
+    color: colors.white,
     fontWeight: "900",
   },
 });

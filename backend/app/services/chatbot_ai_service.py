@@ -54,8 +54,9 @@ CÓMO USAR EL CONTEXTO
 - Prioriza el bloque "analisis_precalculado".
 - Para "¿Dónde es más barata mi lista?", usa primero "comparativa_por_producto": compara productos concretos de la lista con alternativas muy parecidas y más baratas en otros supermercados. No limites la respuesta a una cesta completa.
 - Para ahorro o sustituciones, usa "candidatos_ahorro" y menciona el ahorro estimado si aparece.
-- Para cantidades, usa los productos de la lista si son relevantes; si no, da una regla práctica por persona.
-- Para excesos, usa cantidades altas, productos repetidos o categorías con mucho peso.
+- Para cantidades, usa primero "historico_usuario" si está disponible: compara cantidad actual, media mensual, compras ya realizadas este mes, porcentaje del mes transcurrido y cantidad esperada restante.
+- Si no hay historial suficiente, usa los productos de la lista si son relevantes; si no, da una regla práctica por persona.
+- Para excesos, usa cantidades altas, productos repetidos, categorías con mucho peso o desviaciones frente al historial.
 
 FORMATO DE SALIDA
 Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esquema:
@@ -369,6 +370,14 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
         if any(word in message for word in ["ahorro", "ahorrar", "sustituir", "cambiar", "alternativa", "barata"]):
             return ListChatbotAIService._build_saving_response(analysis)
 
+        if ListChatbotAIService._is_quantity_or_amount_question(message):
+            historical_response = ListChatbotAIService._build_historical_quantity_response(
+                message=message,
+                historico_usuario=list_context.get("historico_usuario") or {},
+            )
+            if historical_response:
+                return historical_response
+
         if ListChatbotAIService._is_quantity_review_request(message):
             return ListChatbotAIService._build_quantity_review_response(analysis, productos)
 
@@ -425,16 +434,53 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             "demasiado",
             "mucho",
             "modificar",
+            "coger",
+            "coja",
+            "comprar",
+            "compre",
+            "kg",
+            "kilo",
+            "kilos",
         ]
         return any(keyword in message for keyword in deterministic_keywords)
 
     @staticmethod
     def _is_quantity_review_request(message: str) -> bool:
-        return any(word in message for word in ["modificar", "revisar", "revisa", "recomiendas", "recomendar"]) and "cantidad" in message
+        return (
+            any(word in message for word in ["modificar", "revisar", "revisa", "recomiendas", "recomendar"])
+            and any(word in message for word in ["cantidad", "kg", "kilo", "kilos", "unidad", "unidades"])
+        )
 
     @staticmethod
     def _is_quantity_recommendation_request(message: str) -> bool:
         return any(word in message for word in ["cantidad", "cuanto", "cuánto", "cuánta", "cuanta", "cuantos", "cuántos", "cuantas", "cuántas"])
+
+    @staticmethod
+    def _is_quantity_or_amount_question(message: str) -> bool:
+        return any(
+            word in message
+            for word in [
+                "cantidad",
+                "cuanto",
+                "cuánto",
+                "cuanta",
+                "cuánta",
+                "comprar",
+                "compro",
+                "compre",
+                "coger",
+                "coja",
+                "llevar",
+                "lleve",
+                "kg",
+                "kilo",
+                "kilos",
+                "unidad",
+                "unidades",
+                "está bien",
+                "esta bien",
+            ]
+        )
 
     @staticmethod
     def _build_analysis_response(
@@ -702,6 +748,102 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             ],
             confidence=0.86,
         )
+
+    @staticmethod
+    def _build_historical_quantity_response(
+        *,
+        message: str,
+        historico_usuario: dict,
+    ) -> ListChatAIResponse | None:
+        insights = historico_usuario.get("productos_relevantes", []) or []
+        if not insights:
+            return None
+
+        selected = ListChatbotAIService._select_relevant_historical_insight(message, insights)
+        if not selected:
+            return None
+
+        product_name = selected.get("producto_actual") or "este producto"
+        current_quantity = ListChatbotAIService._to_float(selected.get("cantidad_actual"))
+        avg_monthly = selected.get("cantidad_media_mensual")
+        avg_per_purchase = selected.get("cantidad_media_por_compra")
+        current_month_total = ListChatbotAIService._to_float(selected.get("cantidad_total_mes_actual"))
+        expected_remaining = selected.get("cantidad_esperada_restante_mes")
+        month_progress = ListChatbotAIService._to_float(selected.get("porcentaje_mes_transcurrido"))
+        recommendation = selected.get("recomendacion_orientativa")
+        historical_purchases = int(selected.get("compras_historicas") or 0)
+        unit = selected.get("unidad_medida") or "unidades registradas"
+
+        if historical_purchases == 0 or avg_monthly is None:
+            return None
+
+        fragments = [
+            f"Para {product_name}, tu historial indica una media de {ListChatbotAIService._format_quantity(avg_monthly)} {unit} al mes",
+        ]
+
+        if avg_per_purchase is not None:
+            fragments.append(
+                f"y {ListChatbotAIService._format_quantity(avg_per_purchase)} {unit} por compra"
+            )
+
+        fragments.append(
+            f"Ahora mismo llevas {ListChatbotAIService._format_quantity(current_month_total)} {unit} compradas este mes y el mes va aproximadamente por el {ListChatbotAIService._format_percent(month_progress)}."
+        )
+
+        if expected_remaining is not None:
+            fragments.append(
+                f"Para lo que queda de mes, la referencia sale en torno a {ListChatbotAIService._format_quantity(expected_remaining)} {unit}."
+            )
+
+        fragments.append(
+            f"En tu lista actual tienes {ListChatbotAIService._format_quantity(current_quantity)} {unit}. {recommendation}"
+        )
+
+        return ListChatAIResponse(
+            intent="recomendar_cantidad",
+            reply=" ".join(fragments),
+            suggestions=[
+                ListChatSuggestion(
+                    type="quantity",
+                    title="Cantidad según historial",
+                    description=(
+                        f"Comparo {product_name} con tus compras anteriores. "
+                        "Si el producto representa kg o packs depende de cómo esté registrado en el catálogo."
+                    ),
+                )
+            ],
+            confidence=0.9,
+        )
+
+    @staticmethod
+    def _select_relevant_historical_insight(message: str, insights: list[dict]) -> dict | None:
+        message_tokens = set(re.findall(r"[a-záéíóúñ]{3,}", message.lower()))
+        normalized_message = message.lower()
+
+        best_score = 0
+        best_insight = None
+
+        for insight in insights:
+            name = str(insight.get("producto_actual") or "").lower()
+            family = str(insight.get("familia_detectada") or "").lower()
+            category = str(insight.get("categoria") or "").lower()
+            tokens = set(re.findall(r"[a-záéíóúñ]{3,}", name))
+
+            score = 0
+            if family and family in normalized_message:
+                score += 6
+            if category and category in normalized_message:
+                score += 2
+            score += len(message_tokens.intersection(tokens)) * 3
+
+            if score > best_score:
+                best_score = score
+                best_insight = insight
+
+        if best_insight and best_score > 0:
+            return best_insight
+
+        return insights[0] if len(insights) == 1 else None
 
     @staticmethod
     def _build_quantity_review_response(analysis: dict, productos: list[dict]) -> ListChatAIResponse:
@@ -1052,6 +1194,13 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
             if any(token in name for token in message_tokens):
                 return product
         return None
+
+    @staticmethod
+    def _format_quantity(value: Any) -> str:
+        number = ListChatbotAIService._to_float(value)
+        if abs(number - round(number)) < 0.01:
+            return str(int(round(number)))
+        return f"{number:.2f}".replace(".", ",")
 
     @staticmethod
     def _format_money(value: Any) -> str:

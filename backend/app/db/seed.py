@@ -173,7 +173,7 @@ def seed_users(db, roles):
                 "notificaciones": True,
                 "unidad_peso": "kg",
                 "unidad_precio": "EUR",
-                "supermercado_favorito": "Lidl",
+                "supermercado_favorito": "DIA",
             },
             "configuracion_bot": {
                 "plataforma": "telegram",
@@ -221,7 +221,7 @@ def seed_users(db, roles):
                 "notificaciones": True,
                 "unidad_peso": "lb",
                 "unidad_precio": "USD",
-                "supermercado_favorito": "Costco",
+                "supermercado_favorito": "Alcampo",
             },
             "configuracion_bot": {
                 "plataforma": "telegram",

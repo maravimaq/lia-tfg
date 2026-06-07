@@ -39,6 +39,34 @@ def update_me(
 ):
     return UserService.update_profile(db, current_user, user_data)
 
+
+@router.put("/me/password")
+def change_password(
+    request_data: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return UserService.change_password(db, current_user, request_data)
+
+
+@router.get("/me/preferences", response_model=PreferenciasResponse)
+def get_my_preferences(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return UserService.get_preferences(db, current_user)
+
+
+@router.put("/me/preferences", response_model=PreferenciasResponse)
+def update_my_preferences(
+    preferences_data: PreferenciasUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return UserService.update_preferences(db, current_user, preferences_data)
+
+
+@router.get("/me/sessions", response_model=list[SessionResponse])
 def get_my_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -65,6 +93,7 @@ def request_account_action(
     current_user: User = Depends(get_current_user),
 ):
     return UserService.request_account_action(db, current_user, request_data)
+
 
 @router.get("/discover", response_model=list[DiscoverUserResponse])
 def discover_users(
