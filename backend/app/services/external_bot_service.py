@@ -395,7 +395,7 @@ class ExternalBotService:
         session: ExternalBotSession,
         query: str,
     ) -> ExternalBotResponse:
-        products = ProductoRepository.search_by_text(db, query, limit=8, orden_precio="asc")
+        products = ProductoRepository.search_by_text(db, query, limit=20, orden_precio="asc")
 
         if not products:
             return ExternalBotService._reply(
@@ -441,7 +441,7 @@ class ExternalBotService:
         session: ExternalBotSession,
         query: str,
     ) -> ExternalBotResponse:
-        products = ProductoRepository.search_by_text(db, query, limit=5, orden_precio="asc")
+        products = ProductoRepository.search_by_text(db, query, limit=8, orden_precio="asc")
 
         if not products:
             return ExternalBotService._reply(
