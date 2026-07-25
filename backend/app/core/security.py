@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import hashlib
+from uuid import uuid4
 
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
@@ -53,7 +54,15 @@ def create_access_token(data: dict) -> str:
     expire = datetime.utcnow() + timedelta(
         minutes=settings.access_token_expire_minutes
     )
-    to_encode.update({"exp": expire, "type": "access"})
+
+    # jti (JWT ID) garantiza que dos tokens emitidos en el mismo segundo
+    # para el mismo usuario sigan siendo diferentes.
+    to_encode.update({
+        "exp": expire,
+        "type": "access",
+        "jti": uuid4().hex,
+    })
+
     encoded_jwt = jwt.encode(
         to_encode,
         settings.jwt_secret_key,
