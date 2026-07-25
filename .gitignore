@@ -35,3 +35,10 @@ google-services.json
 
 backend/.env
 __pycache__
+
+.coverage
+coverage.json
+htmlcov/
+.pytest_cache/
+__pycache__/
+*.pyc
