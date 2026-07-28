@@ -33,6 +33,7 @@ google-services.json
 # Android Profiling
 *.hprof
 
+.env
 backend/.env
 __pycache__
 
