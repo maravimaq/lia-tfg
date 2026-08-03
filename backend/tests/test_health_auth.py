@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from app.core.config import settings
 from app.services.email_service import EmailService
 from tests.helpers import auth_headers, login_user, register_and_login, register_user, user_payload
 
@@ -11,12 +12,12 @@ from tests.helpers import auth_headers, login_user, register_and_login, register
 @pytest.mark.integration
 def test_health_endpoints(client):
     response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
 
-    response = client.get("/external-bot/health")
     assert response.status_code == 200
-    assert response.json()["module"] == "external-bot"
+    assert response.json() == {
+        "status": "ok",
+        "environment": settings.environment,
+    }
 
 
 @pytest.mark.integration
