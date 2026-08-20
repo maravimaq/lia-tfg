@@ -64,6 +64,7 @@ def create_product(
     brand: str = "Hacendado",
     category: str = "Lácteos",
     unit: str = "L",
+    image_url: str | None = None,
 ) -> dict:
     response = client.post(
         "/productos",
@@ -74,6 +75,7 @@ def create_product(
             "supermercado": supermarket,
             "precio_unitario": price,
             "unidad_medida": unit,
+            "imagen_url": image_url,
         },
     )
     assert response.status_code == 200, response.text

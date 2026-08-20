@@ -15,13 +15,23 @@ from tests.helpers import (
 
 @pytest.mark.integration
 def test_catalog_search_compare_and_crud(client):
-    milk_a = create_product(client, name="Leche entera 1L", price="1.25", supermarket="Mercadona")
+    milk_a = create_product(client, name="Leche entera 1L", price="1.25", supermarket="Mercadona", image_url="https://example.com/leche-mercadona.jpg")
     milk_b = create_product(client, name="Leche entera 1L", price="1.10", supermarket="DIA", brand="DIA")
     create_product(client, name="Café con leche", price="0.85", supermarket="Carrefour")
 
     search = client.get("/productos/search", params={"nombre": "Leche entera", "orden_precio": "asc"})
     assert search.status_code == 200
     assert len(search.json()) >= 2
+    
+    mercadona_result = next(
+    item
+    for item in search.json()
+    if item["id_producto"] == milk_a["id_producto"]
+)
+
+    assert mercadona_result["imagen_url"] == (
+        "https://example.com/leche-mercadona.jpg"
+    )
 
     compare = client.get("/productos/comparar", params={"nombre": "Leche entera"})
     assert compare.status_code == 200
@@ -43,7 +53,7 @@ def test_catalog_search_compare_and_crud(client):
 def test_list_and_product_line_crud_recalculates_total(client):
     _, token = register_and_login(client)
     shopping_list = create_list(client, token)
-    product = create_product(client, price="1.25")
+    product = create_product(client, price="1.25", image_url="https://example.com/producto-lista.jpg")
 
     line = add_product_to_list(
         client,
@@ -61,6 +71,7 @@ def test_list_and_product_line_crud_recalculates_total(client):
     assert detail.status_code == 200
     assert Decimal(detail.json()["total_estimado"]) == Decimal("2.50")
     assert len(detail.json()["productos"]) == 1
+    assert (detail.json()["productos"][0]["producto"]["imagen_url"] == "https://example.com/producto-lista.jpg")
 
     update_line = client.put(
         f"/productos-lista/{line['id_producto_lista']}",
