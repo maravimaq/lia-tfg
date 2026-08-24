@@ -6,6 +6,7 @@ export type Producto = {
   supermercado: string;
   precio_unitario: string;
   unidad_medida: string | null;
+  imagen_url: string | null;
   fecha_actualizacion: string;
 };
 
@@ -16,6 +17,7 @@ export type ProductoCreate = {
   supermercado: string;
   precio_unitario: number;
   unidad_medida?: string | null;
+  imagen_url?: string | null;
 };
 
 export type ProductoUpdate = Partial<ProductoCreate>;

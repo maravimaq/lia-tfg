@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
+import { ProductImage } from "@/src/components/ProductImage";
 import { AppColors } from "@/src/constants/colors";
 import { useAppTheme } from "@/src/hooks/useAppTheme";
 import { productosService } from "@/src/services/productos";
@@ -136,9 +137,11 @@ export default function CompararProductosScreen() {
 
           return (
             <View key={producto.id_producto} style={styles.supermarketRow}>
-              <View style={styles.productIconBox}>
-                <Text style={styles.productIcon}>▧</Text>
-              </View>
+              <ProductImage
+                uri={producto.imagen_url}
+                productName={producto.nombre}
+                size={56}
+              />
 
               <View style={styles.supermarketInfo}>
                 <View style={styles.supermarketTopRow}>
@@ -397,18 +400,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 16,
   },
-  productIconBox: {
-    width: 28,
-    alignItems: "center",
-    paddingTop: 2,
-  },
-  productIcon: {
-    fontSize: 18,
-    color: colors.title,
-  },
   supermarketInfo: {
     flex: 1,
-    marginLeft: 8,
+    marginLeft: 12,
   },
   supermarketTopRow: {
     flexDirection: "row",

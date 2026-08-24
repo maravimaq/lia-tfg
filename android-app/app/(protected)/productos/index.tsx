@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
+import { ProductImage } from "@/src/components/ProductImage";
 import { Colors } from "@/src/constants/colors";
 import { listasService } from "@/src/services/listas";
 import { productosService } from "@/src/services/productos";
@@ -453,31 +454,39 @@ export default function ProductosScreen() {
 
           return (
             <View style={styles.card}>
-              <View style={styles.productInfo}>
-                <View style={styles.cardTopRow}>
-                  <Text style={styles.productName}>{item.nombre}</Text>
+              <View style={styles.productRow}>
+                <ProductImage
+                  uri={item.imagen_url}
+                  productName={item.nombre}
+                  size={76}
+                />
 
-                  {cantidadEnLista > 0 ? (
-                    <View style={styles.inListBadge}>
-                      <Text style={styles.inListBadgeText}>
-                        x{cantidadEnLista}
-                      </Text>
-                    </View>
-                  ) : null}
+                <View style={styles.productInfo}>
+                  <View style={styles.cardTopRow}>
+                    <Text style={styles.productName}>{item.nombre}</Text>
+
+                    {cantidadEnLista > 0 ? (
+                      <View style={styles.inListBadge}>
+                        <Text style={styles.inListBadgeText}>
+                          x{cantidadEnLista}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <Text style={styles.productMeta}>
+                    {item.marca ?? "Sin marca"} · {item.supermercado}
+                  </Text>
+
+                  <Text style={styles.productMeta}>
+                    {item.categoria ?? "Sin categoría"} ·{" "}
+                    {item.unidad_medida ?? "Sin unidad"}
+                  </Text>
+
+                  <Text style={styles.price}>
+                    {formatEuro(item.precio_unitario)}
+                  </Text>
                 </View>
-
-                <Text style={styles.productMeta}>
-                  {item.marca ?? "Sin marca"} · {item.supermercado}
-                </Text>
-
-                <Text style={styles.productMeta}>
-                  {item.categoria ?? "Sin categoría"} ·{" "}
-                  {item.unidad_medida ?? "Sin unidad"}
-                </Text>
-
-                <Text style={styles.price}>
-                  {formatEuro(item.precio_unitario)}
-                </Text>
               </View>
 
               {isAddingToList && canAddToSelectedList ? (
@@ -720,8 +729,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  productInfo: {
+    productRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
     marginBottom: 12,
+  },
+  productInfo: {
+    flex: 1,
   },
   cardTopRow: {
     flexDirection: "row",
