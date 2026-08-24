@@ -73,10 +73,12 @@ def test_create_product():
             marca="DIA",
             categoria="Lácteos",
             unidad_medida="L",
+            imagen_url="https://example.com/leche.jpg",
         )
     )
     assert product.nombre == "Leche entera"
     assert product.precio_unitario == Decimal("1.20")
+    assert product.imagen_url == "https://example.com/leche.jpg"
     db.add.assert_called_once_with(product)
 
 
@@ -90,6 +92,7 @@ def test_update_product_changed_and_unchanged():
         fecha_actualizacion=None,
         supermercado="DIA",
         nombre="Leche entera",
+        imagen_url=None,
     )
     changed = importer._update_product_if_needed(
         existing,
@@ -98,11 +101,13 @@ def test_update_product_changed_and_unchanged():
             marca="DIA",
             categoria="Lácteos",
             unidad_medida="L",
+            imagen_url="https://example.com/leche.jpg",
         ),
     )
     assert changed
     assert existing.precio_unitario == Decimal("1.20")
     assert existing.marca == "DIA"
+    assert existing.imagen_url == "https://example.com/leche.jpg"
     assert existing.fecha_actualizacion is not None
 
     assert not importer._update_product_if_needed(
@@ -112,6 +117,7 @@ def test_update_product_changed_and_unchanged():
             marca="DIA",
             categoria="Lácteos",
             unidad_medida="L",
+            imagen_url="https://example.com/leche.jpg",
         ),
     )
 
@@ -133,6 +139,7 @@ def test_import_products_create_update_unchanged_and_commit():
         categoria=None,
         unidad_medida=None,
         fecha_actualizacion=None,
+        imagen_url=None,
     )
     existing_same = SimpleNamespace(
         supermercado="DIA",
@@ -142,6 +149,7 @@ def test_import_products_create_update_unchanged_and_commit():
         categoria="Arroz",
         unidad_medida="kg",
         fecha_actualizacion=None,
+        imagen_url=None,
     )
     db = MagicMock()
     db.query.return_value.filter.return_value.all.return_value = [

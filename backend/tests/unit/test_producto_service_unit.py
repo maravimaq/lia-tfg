@@ -17,6 +17,7 @@ def _create_data():
         supermercado="Mercadona",
         precio_unitario=Decimal("1.20"),
         unidad_medida="1 L",
+        imagen_url="https://example.com/leche.jpg",
     )
 
 
@@ -37,6 +38,7 @@ def test_create_producto_construye_modelo_y_delega(db):
         supermercado="Mercadona",
         precio_unitario=Decimal("1.20"),
         unidad_medida="1 L",
+        imagen_url="https://example.com/leche.jpg",
     )
     create_mock.assert_called_once_with(db, model.return_value)
 

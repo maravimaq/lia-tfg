@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
+import { ProductImage } from "@/src/components/ProductImage";
 import { Colors } from "@/src/constants/colors";
 import { useAuth } from "@/src/hooks/useAuth";
 import { historialService } from "@/src/services/historial";
@@ -651,21 +652,29 @@ export default function DetalleListaScreen() {
 
           return (
             <View style={styles.card}>
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{item.producto.nombre}</Text>
+              <View style={styles.productRow}>
+                <ProductImage
+                  uri={item.producto.imagen_url}
+                  productName={item.producto.nombre}
+                  size={72}
+                />
 
-                <Text style={styles.productMeta}>
-                  {item.producto.marca ?? "Sin marca"} ·{" "}
-                  {item.producto.supermercado}
-                </Text>
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName}>{item.producto.nombre}</Text>
 
-                <Text style={styles.productMeta}>
-                  Precio unidad: {formatEuro(item.producto.precio_unitario)}
-                </Text>
+                  <Text style={styles.productMeta}>
+                    {item.producto.marca ?? "Sin marca"} ·{" "}
+                    {item.producto.supermercado}
+                  </Text>
 
-                <Text style={styles.productTotal}>
-                  Subtotal: {formatEuro(item.precio_estimado)}
-                </Text>
+                  <Text style={styles.productMeta}>
+                    Precio unidad: {formatEuro(item.producto.precio_unitario)}
+                  </Text>
+
+                  <Text style={styles.productTotal}>
+                    Subtotal: {formatEuro(item.precio_estimado)}
+                  </Text>
+                </View>
               </View>
 
               {canModifyProducts ? (
@@ -1265,8 +1274,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  productInfo: {
+  productRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
     marginBottom: 12,
+  },
+  productInfo: {
+    flex: 1,
   },
   productName: {
     fontSize: 18,

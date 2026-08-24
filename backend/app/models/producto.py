@@ -18,6 +18,7 @@ class Producto(Base):
 
     precio_unitario = Column(Numeric(10, 2), nullable=False, default=0)
     unidad_medida = Column(String, nullable=True)
+    imagen_url = Column(String, nullable=True)
 
     fecha_actualizacion = Column(
         DateTime,
