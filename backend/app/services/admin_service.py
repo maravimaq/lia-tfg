@@ -1132,6 +1132,7 @@ class AdminService:
                             mercadona_max_categories=settings.mercadona_max_categories,
                             carrefour_max_urls=settings.carrefour_max_urls,
                             carrefour_max_products_per_url=settings.carrefour_max_products_per_url,
+                            carrefour_max_pages_per_url=settings.carrefour_max_pages_per_url,
                             carrefour_use_playwright_fallback=settings.carrefour_use_playwright_fallback,
                             aldi_max_listing_urls=settings.aldi_max_listing_urls,
                             aldi_max_article_links=settings.aldi_max_article_links,

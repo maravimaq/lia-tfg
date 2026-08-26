@@ -43,6 +43,54 @@ def test_carrefour_impressions_y_deduplicado(scrapers):
     p2 = ScrapedProduct("LECHE", Decimal("1.30"), "Carrefour", external_id="1")
     assert len(s._deduplicate_products([p1, p2])) == 1
 
+def test_carrefour_pagination_urls(scrapers):
+    s = scrapers["carrefour"]
+
+    base_url = "https://www.carrefour.es/supermercado/bebidas/cat20003/c"
+
+    assert s._build_page_url(base_url, page=1) == base_url
+    assert s._build_page_url(base_url, page=2) == f"{base_url}?offset=24"
+    assert s._build_page_url(base_url, page=3) == f"{base_url}?offset=48"
+    assert s._build_page_url(base_url, page=5) == f"{base_url}?offset=96"
+
+
+def test_carrefour_categoria_prioriza_url_controlada(scrapers):
+    s = scrapers["carrefour"]
+
+    html = """
+    <html>
+        <body>
+            <h1>
+                Comida y accesorios para mascotas online al mejor precio
+            </h1>
+        </body>
+    </html>
+    """
+
+    url = (
+        "https://www.carrefour.es/supermercado/"
+        "mascotas/cat20007/c?offset=24"
+    )
+
+    assert (
+        s._extract_category_from_html_or_url(
+            html,
+            url,
+        )
+        == "Mascotas"
+    )
+
+
+def test_carrefour_detecta_bloqueo_html(scrapers):
+    s = scrapers["carrefour"]
+
+    assert s._is_blocked_html(
+        "<html><h1>Sorry, you have been blocked</h1></html>"
+    )
+
+    assert not s._is_blocked_html(
+        "<html><h1>La Despensa</h1></html>"
+    )
 
 def test_dia_helpers(scrapers):
     s = scrapers["dia"]
