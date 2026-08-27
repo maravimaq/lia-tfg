@@ -75,9 +75,9 @@ class Settings(BaseSettings):
     carrefour_use_playwright_fallback: bool = True
 
     # ALDI
-    aldi_max_listing_urls: int = 3
+    aldi_max_listing_urls: int = 1
     aldi_max_article_links: int = 120
-    aldi_max_products: int = 120
+    aldi_max_products: int = 250
     aldi_use_playwright_fallback: bool = True
 
     # Alcampo

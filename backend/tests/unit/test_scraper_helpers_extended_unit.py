@@ -1,6 +1,7 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
+import json
 import pytest
 from bs4 import BeautifulSoup
 
@@ -147,6 +148,139 @@ def test_aldi_validity_y_format(scrapers):
     dates = s._extract_validity("Precios válidos del 01-07-2026 al 07-07-2026")
     assert dates == ("01-07-2026", "07-07-2026")
     assert s._guess_unit_from_name("Leche 1 l") == "L"
+
+def test_aldi_extract_next_data_offers(scrapers):
+    s = scrapers["aldi"]
+
+    api_data = [
+        [
+            "OFFER_GET",
+            {
+                "req": {
+                    "locale": "es",
+                    "week": "current",
+                    "region": "pen",
+                },
+                "res": {
+                    "algoliaDataMap": {
+                        "10001": {
+                            "objectID": "10001",
+                            "name": "Leche entera",
+                            "isAvailable": True,
+                            "currentPrice": {
+                                "priceValue": 1.29,
+                            },
+                        },
+                        "10002": {
+                            "objectID": "10002",
+                            "name": "Producto no disponible",
+                            "isAvailable": False,
+                            "currentPrice": {
+                                "priceValue": 2.50,
+                            },
+                        },
+                    }
+                },
+            },
+        ],
+        [
+            "PAGE_MGNL_GET",
+            {
+                "req": {
+                    "locale": "es",
+                },
+                "res": {},
+            },
+        ],
+    ]
+
+    next_data = {
+        "props": {
+            "pageProps": {
+                "apiData": json.dumps(api_data),
+            }
+        }
+    }
+
+    html = (
+        '<html><body>'
+        '<script id="__NEXT_DATA__" type="application/json">'
+        f'{json.dumps(next_data)}'
+        '</script>'
+        '</body></html>'
+    )
+
+    items = s._extract_offer_items(html)
+
+    assert len(items) == 1
+    assert items[0]["objectID"] == "10001"
+    assert items[0]["name"] == "Leche entera"
+    assert items[0]["currentPrice"]["priceValue"] == 1.29
+
+
+def test_aldi_build_offer_product_y_deduplicado(scrapers):
+    s = scrapers["aldi"]
+
+    base_item = {
+        "name": "Leche entera",
+        "brandName": "MILSA®",
+        "salesUnit": "1 l unidad",
+        "isAvailable": True,
+        "currentPrice": {
+            "priceValue": 1.29,
+        },
+        "hierarchicalCategories": {
+            "lvl0": ["Lácteos"],
+        },
+        "assets": [
+            {
+                "type": "primary",
+                "url": "https://example.com/leche.jpg",
+            }
+        ],
+        "promotionPrices": [
+            {
+                "validFromLocalDate": "2026-08-24",
+                "validUntilLocalDate": "2026-08-30",
+            }
+        ],
+        "productSlug": "leche-entera-10001",
+        "objectID": "10001",
+    }
+
+    product_1 = s._build_product_from_offer_item(
+        base_item,
+        source_url="https://www.aldi.es/ofertas.html",
+    )
+
+    second_item = {
+        **base_item,
+        "objectID": "10002",
+        "productSlug": "leche-entera-10002",
+    }
+
+    product_2 = s._build_product_from_offer_item(
+        second_item,
+        source_url="https://www.aldi.es/ofertas.html",
+    )
+
+    assert product_1.nombre == "Leche entera"
+    assert product_1.precio == Decimal("1.29")
+    assert product_1.marca == "MILSA"
+    assert product_1.categoria == "Lácteos"
+    assert product_1.formato == "1 l unidad"
+    assert product_1.unidad_medida == "L"
+    assert product_1.external_id == "10001"
+    assert product_1.imagen_url == "https://example.com/leche.jpg"
+    assert product_1.metadata["valid_from"] == "2026-08-24"
+    assert product_1.metadata["valid_to"] == "2026-08-30"
+
+    # Mismo nombre, pero IDs distintos: son productos distintos.
+    assert len(
+        s._deduplicate_products(
+            [product_1, product_2]
+        )
+    ) == 2
 
 
 def test_alcampo_helpers(scrapers):
