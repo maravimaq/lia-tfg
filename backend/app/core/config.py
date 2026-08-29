@@ -45,11 +45,16 @@ class Settings(BaseSettings):
     password_reset_url: str = "lia://reset-password"
 
     # IA
-    # Valores admitidos actualmente: ollama, openai o mock.
-    ai_provider: str = "ollama"
-    openai_api_key: str | None = None
+    # Valores admitidos: cloudflare, ollama o mock.
+    ai_provider: str = "cloudflare"
 
-    # Ollama
+    # Cloudflare Workers AI
+    cloudflare_account_id: str | None = None
+    cloudflare_ai_token: str | None = None
+    cloudflare_ai_model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    cloudflare_ai_timeout_seconds: int = 90
+
+    # Ollama (opcional para desarrollo local)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:3b"
     ollama_timeout_seconds: int = 300

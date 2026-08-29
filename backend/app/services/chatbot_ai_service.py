@@ -12,15 +12,6 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.schemas.chat import ListChatAIResponse, ListChatSuggestion
 
-try:
-    from openai import OpenAI, OpenAIError
-except ImportError:  # pragma: no cover - OpenAI es opcional si usamos Ollama/mock
-    OpenAI = None
-
-    class OpenAIError(Exception):
-        pass
-
-
 class ListChatbotAIService:
     """Genera respuestas para el chat interno de una lista.
 
@@ -89,26 +80,178 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
         user_message: str,
         list_context: dict,
     ) -> ListChatAIResponse:
-        provider = (settings.ai_provider or "ollama").lower().strip()
+        provider = (settings.ai_provider or "cloudflare").lower().strip()
 
         # Para preguntas calculables sobre la lista, priorizamos el backend.
-        # Motivo: los modelos locales pequeños pueden devolver JSON válido, pero inventar monedas,
-        # supermercados o ahorros. En un TFG esto queda peor que una respuesta objetiva.
-        if ListChatbotAIService._should_answer_deterministically(user_message, list_context):
-            return ListChatbotAIService._generate_mock_response(user_message, list_context)
+        # Evita que la IA invente precios, supermercados, cantidades o ahorros
+        # cuando ya disponemos de datos objetivos calculados por LIA.
+        if ListChatbotAIService._should_answer_deterministically(
+            user_message,
+            list_context,
+        ):
+            return ListChatbotAIService._generate_mock_response(
+                user_message,
+                list_context,
+            )
 
         if provider == "mock":
-            return ListChatbotAIService._generate_mock_response(user_message, list_context)
+            return ListChatbotAIService._generate_mock_response(
+                user_message,
+                list_context,
+            )
+
+        if provider == "cloudflare":
+            return ListChatbotAIService._generate_with_cloudflare(
+                user_message,
+                list_context,
+            )
 
         if provider == "ollama":
-            return ListChatbotAIService._generate_with_ollama(user_message, list_context)
-
-        if provider == "openai":
-            return ListChatbotAIService._generate_with_openai(user_message, list_context)
+            return ListChatbotAIService._generate_with_ollama(
+                user_message,
+                list_context,
+            )
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Proveedor de IA no soportado: {settings.ai_provider}",
+        )
+
+    @staticmethod
+    def _generate_with_cloudflare(
+        user_message: str,
+        list_context: dict,
+    ) -> ListChatAIResponse:
+        if not settings.cloudflare_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Falta configurar CLOUDFLARE_ACCOUNT_ID en el backend.",
+            )
+
+        if not settings.cloudflare_ai_token:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Falta configurar CLOUDFLARE_AI_TOKEN en el backend.",
+            )
+
+        model = settings.cloudflare_ai_model
+
+        url = (
+            "https://api.cloudflare.com/client/v4/accounts/"
+            f"{settings.cloudflare_account_id}/ai/run/{model}"
+        )
+
+        payload = {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": ListChatbotAIService.SYSTEM_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": ListChatbotAIService._build_user_prompt(
+                        user_message,
+                        list_context,
+                    ),
+                },
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": ListChatAIResponse.model_json_schema(),
+            },
+            "temperature": 0.1,
+            "max_tokens": 500,
+        }
+
+        try:
+            with httpx.Client(
+                timeout=settings.cloudflare_ai_timeout_seconds
+            ) as client:
+                response = client.post(
+                    url,
+                    headers={
+                        "Authorization": (
+                            f"Bearer {settings.cloudflare_ai_token}"
+                        ),
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+
+        except httpx.ConnectError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No se pudo conectar con Cloudflare Workers AI.",
+            ) from exc
+
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Cloudflare Workers AI devolvió un error: "
+                    f"{exc.response.text}"
+                ),
+            ) from exc
+
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Error al consultar Cloudflare Workers AI: {exc}",
+            ) from exc
+
+        result = data.get("result")
+
+        if not isinstance(result, dict):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Cloudflare Workers AI no devolvió un resultado válido.",
+            )
+
+        parsed_json = result.get("response")
+
+        # Algunos modelos pueden devolver el JSON como texto dentro de choices.
+        if not isinstance(parsed_json, dict):
+            choices = result.get("choices") or []
+
+            if choices:
+                raw_content = (
+                    choices[0]
+                    .get("message", {})
+                    .get("content")
+                )
+
+                if raw_content:
+                    parsed_json = ListChatbotAIService._parse_ai_json(
+                        raw_content
+                    )
+
+        if not isinstance(parsed_json, dict):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Cloudflare Workers AI no devolvió "
+                    "una respuesta estructurada."
+                ),
+            )
+
+        try:
+            ai_response = ListChatAIResponse.model_validate(parsed_json)
+
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Cloudflare Workers AI no devolvió "
+                    f"una respuesta válida: {exc}"
+                ),
+            ) from exc
+
+        return ListChatbotAIService._postprocess_response(
+            ai_response=ai_response,
+            user_message=user_message,
+            list_context=list_context,
         )
 
     @staticmethod
@@ -182,72 +325,6 @@ Devuelve SIEMPRE un JSON válido y nada más. Debe cumplir exactamente este esqu
 
         return ListChatbotAIService._postprocess_response(
             ai_response=ai_response,
-            user_message=user_message,
-            list_context=list_context,
-        )
-
-    @staticmethod
-    def _generate_with_openai(
-        user_message: str,
-        list_context: dict,
-    ) -> ListChatAIResponse:
-        if not settings.openai_enabled:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="OpenAI está desactivado en la configuración.",
-            )
-
-        if not settings.openai_api_key:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Falta configurar OPENAI_API_KEY en el backend.",
-            )
-
-        if OpenAI is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Falta instalar la dependencia openai. Ejecuta pip install -r requirements.txt.",
-            )
-
-        client = OpenAI(
-            api_key=settings.openai_api_key,
-            timeout=settings.openai_timeout_seconds,
-        )
-
-        try:
-            completion = client.chat.completions.parse(
-                model=settings.openai_model,
-                temperature=0.1,
-                messages=[
-                    {"role": "system", "content": ListChatbotAIService.SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": ListChatbotAIService._build_user_prompt(user_message, list_context),
-                    },
-                ],
-                response_format=ListChatAIResponse,
-            )
-        except OpenAIError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Error al consultar OpenAI: {exc}",
-            ) from exc
-        except ValidationError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"La IA no devolvió una respuesta válida: {exc}",
-            ) from exc
-
-        parsed_response = completion.choices[0].message.parsed
-
-        if parsed_response is None:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="La IA no devolvió una respuesta estructurada.",
-            )
-
-        return ListChatbotAIService._postprocess_response(
-            ai_response=parsed_response,
             user_message=user_message,
             list_context=list_context,
         )
