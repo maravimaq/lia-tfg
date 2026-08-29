@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+import re
 import asyncio
 import logging
 from decimal import Decimal
 from typing import Any, Optional
 from urllib.parse import urljoin
+from bs4 import BeautifulSoup
 
 import httpx
 
@@ -26,14 +29,15 @@ class DiaScraper(BaseScraper):
     Scraper de catálogo para DIA.
 
     Estrategia:
-    - Obtener categorías desde un endpoint interno de analytics.
-    - Recorrer rutas de categorías.
-    - Consumir el endpoint interno de listado reducido de productos.
+    - Obtener categorías desde el endpoint interno de analytics.
+    - Conservar solo rutas públicas de categorías reales.
+    - Recorrer las páginas públicas de categoría.
+    - Extraer el estado SSR desde #vike_pageContext.
+    - Leer INITIAL_STATE.l2.plp_items y su paginación.
     - Aceptar solo productos con nombre + precio + estructura fiable.
 
-    Nota:
-    DIA puede requerir cookie en algunos entornos. Por ahora el scraper funciona
-    sin depender obligatoriamente de cookie, pero admite `cookie` en el constructor.
+    DIA puede requerir cookie en algunos entornos. El scraper admite
+    `cookie` en el constructor, aunque no depende obligatoriamente de ella.
     """
 
     supermercado = "DIA"
@@ -43,8 +47,6 @@ class DiaScraper(BaseScraper):
         "https://www.dia.es/api/v1/plp-insight/initial_analytics/"
         "charcuteria-y-quesos/jamon-cocido-lacon-fiambres-y-mortadela/c/L2001"
     )
-
-    PRODUCTS_BY_CATEGORY_BASE_URL = "https://www.dia.es/api/v1/plp-back/reduced"
 
     def __init__(
         self,
@@ -97,11 +99,15 @@ class DiaScraper(BaseScraper):
                 if self.delay_seconds > 0:
                     await asyncio.sleep(self.delay_seconds)
 
+            raw_product_count = len(products)
+            products = self._deduplicate_products(products)
+            duplicated_count = raw_product_count - len(products)
+
             return ScraperRunResult(
                 supermercado=self.supermercado,
                 status="success" if products else "empty",
                 products=products,
-                detected_count=len(products) + rejected_count,
+                detected_count=raw_product_count + rejected_count,
                 accepted_count=len(products),
                 rejected_count=rejected_count,
                 message=(
@@ -113,6 +119,7 @@ class DiaScraper(BaseScraper):
                     "available_categories": len(category_paths),
                     "max_categories": self.max_categories,
                     "max_pages_per_category": self.max_pages_per_category,
+                    "duplicated_products": duplicated_count,
                 },
             )
 
@@ -154,7 +161,13 @@ class DiaScraper(BaseScraper):
             logger.warning("DIA no ha devuelto menu_analytics válido.")
             return []
 
-        category_paths = self._extract_category_paths(menu_analytics)
+        category_groups = self._extract_category_groups(
+            menu_analytics
+        )
+
+        category_paths = self._interleave_category_groups(
+            category_groups
+        )
 
         unique_paths: list[str] = []
         seen: set[str] = set()
@@ -182,17 +195,21 @@ class DiaScraper(BaseScraper):
         rejected_count = 0
 
         for page in range(1, self.max_pages_per_category + 1):
-            url = self._build_products_url(category_path, page=page)
+            url = self._build_products_url(
+                category_path,
+                page=page,
+            )
 
             try:
-                data = await self.get_json(
+                html = await self.get_text(
                     url,
-                    headers=self._dia_headers(),
+                    headers=self._dia_page_headers(),
                 )
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 404:
                     logger.debug(
-                        "DIA categoría sin página: category=%s page=%s",
+                        "DIA categoría sin página: "
+                        "category=%s page=%s",
                         category_path,
                         page,
                     )
@@ -200,9 +217,9 @@ class DiaScraper(BaseScraper):
 
                 raise
 
-            items = data.get("plp_items")
+            items, pagination = self._extract_category_page(html)
 
-            if not isinstance(items, list) or not items:
+            if not items:
                 break
 
             page_products, page_rejected = self._parse_items(
@@ -213,15 +230,118 @@ class DiaScraper(BaseScraper):
             products.extend(page_products)
             rejected_count += page_rejected
 
-            # Si la API no devuelve info de paginación clara, este corte evita
-            # insistir cuando una página ya viene vacía o repetida.
-            if len(items) == 0:
+            total_pages = pagination.get("total_pages")
+
+            if (
+                isinstance(total_pages, int)
+                and page >= total_pages
+            ):
                 break
 
             if self.delay_seconds > 0:
                 await asyncio.sleep(self.delay_seconds)
 
         return products, rejected_count
+
+    def _extract_category_page(
+        self,
+        html: str,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        soup = BeautifulSoup(html, "html.parser")
+
+        script = soup.find(
+            "script",
+            id="vike_pageContext",
+        )
+
+        if script is None:
+            logger.warning(
+                "DIA: página sin vike_pageContext."
+            )
+            return [], {}
+
+        content = script.string or script.get_text()
+
+        if not content:
+            return [], {}
+
+        try:
+            page_context = json.loads(content)
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "DIA: vike_pageContext inválido: %s",
+                exc,
+            )
+            return [], {}
+
+        initial_state = page_context.get("INITIAL_STATE")
+
+        if not isinstance(initial_state, dict):
+            return [], {}
+
+        l2_state = initial_state.get("l2")
+
+        if not isinstance(l2_state, dict):
+            return [], {}
+
+        raw_items = l2_state.get("plp_items")
+
+        if not isinstance(raw_items, list):
+            return [], {}
+
+        # DIA añade un elemento técnico al final del listado que
+        # no representa ningún producto. Solo conservamos objetos
+        # con la estructura mínima de producto real.
+        items = [
+            item
+            for item in raw_items
+            if self._looks_like_product_item(item)
+        ]
+
+        pagination_state = initial_state.get("pagination")
+
+        pagination: dict[str, Any] = {}
+
+        if isinstance(pagination_state, dict):
+            raw_pagination = pagination_state.get(
+                "pagination"
+            )
+
+            if isinstance(raw_pagination, dict):
+                pagination = raw_pagination
+
+        pagination = {
+            **pagination,
+            "total_items": initial_state.get(
+                "total_items"
+            ),
+        }
+
+        return items, pagination
+
+
+    @staticmethod
+    def _looks_like_product_item(
+        item: Any,
+    ) -> bool:
+        if not isinstance(item, dict):
+            return False
+
+        product_id = (
+            item.get("object_id")
+            or item.get("sku_id")
+        )
+
+        name = item.get("display_name") or item.get("name")
+        prices = item.get("prices")
+
+        if not product_id or not name:
+            return False
+
+        if not isinstance(prices, dict):
+            return False
+
+        return prices.get("price") is not None
 
     def _parse_items(
         self,
@@ -318,16 +438,28 @@ class DiaScraper(BaseScraper):
             },
         )
 
-    def _build_products_url(self, category_path: str, *, page: int) -> str:
+    def _build_products_url(
+        self,
+        category_path: str,
+        *,
+        page: int,
+    ) -> str:
         path = clean_text(category_path)
 
         if not path.startswith("/"):
             path = "/" + path
 
-        url = self.PRODUCTS_BY_CATEGORY_BASE_URL + path
+        base_url = urljoin(
+            self.base_url or "https://www.dia.es",
+            path,
+        )
 
-        separator = "&" if "?" in url else "?"
-        return f"{url}{separator}page={page}"
+        if page <= 1:
+            return base_url
+
+        separator = "&" if "?" in base_url else "?"
+
+        return f"{base_url}{separator}page={page}"
 
     def _dia_headers(self) -> dict[str, str]:
         headers = {
@@ -341,7 +473,24 @@ class DiaScraper(BaseScraper):
 
         return headers
 
-    def _extract_category_paths(self, node: dict[str, Any]) -> list[str]:
+    def _dia_page_headers(self) -> dict[str, str]:
+        headers = {
+            "Accept": (
+                "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,*/*;q=0.8"
+            ),
+            "Referer": "https://www.dia.es/",
+        }
+
+        if self.cookie:
+            headers["Cookie"] = self.cookie
+
+        return headers
+
+    def _extract_category_paths(
+        self,
+        node: dict[str, Any],
+    ) -> list[str]:
         paths: list[str] = []
 
         def visit(current_node: Any) -> None:
@@ -349,13 +498,12 @@ class DiaScraper(BaseScraper):
                 return
 
             node_path = current_node.get("path")
-            node_parameter = current_node.get("parameter")
 
-            if isinstance(node_path, str) and node_path:
+            if (
+                isinstance(node_path, str)
+                and self._is_catalog_category_path(node_path)
+            ):
                 paths.append(node_path)
-
-            if isinstance(node_parameter, str) and node_parameter:
-                paths.append(node_parameter)
 
             children = current_node.get("children")
 
@@ -363,10 +511,100 @@ class DiaScraper(BaseScraper):
                 for child in children.values():
                     visit(child)
 
+            elif isinstance(children, list):
+                for child in children:
+                    visit(child)
+
         for value in node.values():
             visit(value)
 
         return paths
+
+    def _extract_category_groups(
+        self,
+        menu_analytics: dict[str, Any],
+    ) -> list[list[str]]:
+        groups: list[list[str]] = []
+
+        for value in menu_analytics.values():
+            if not isinstance(value, dict):
+                continue
+
+            paths = self._extract_category_paths(
+                {"root": value}
+            )
+
+            unique_paths: list[str] = []
+            seen: set[str] = set()
+
+            for path in paths:
+                normalized = clean_text(path)
+
+                if not normalized:
+                    continue
+
+                if normalized in seen:
+                    continue
+
+                seen.add(normalized)
+                unique_paths.append(normalized)
+
+            if unique_paths:
+                groups.append(unique_paths)
+
+        return groups
+
+
+    @staticmethod
+    def _interleave_category_groups(
+        groups: list[list[str]],
+    ) -> list[str]:
+        if not groups:
+            return []
+
+        ordered: list[str] = []
+        seen: set[str] = set()
+
+        max_group_size = max(
+            len(group)
+            for group in groups
+        )
+
+        for position in range(max_group_size):
+            for group in groups:
+                if position >= len(group):
+                    continue
+
+                path = group[position]
+
+                if path in seen:
+                    continue
+
+                seen.add(path)
+                ordered.append(path)
+
+        return ordered
+
+
+    @staticmethod
+    def _is_catalog_category_path(value: str) -> bool:
+        path = clean_text(value)
+
+        match = re.search(
+            r"/c/(?P<code>L\d+)$",
+            path,
+            flags=re.IGNORECASE,
+        )
+
+        if not match:
+            return False
+
+        code = match.group("code").upper()
+
+        # Las categorías L1 son agrupadores generales.
+        # Sus páginas pueden anunciar total_items pero no traer
+        # plp_items SSR. Trabajamos con categorías L2+.
+        return not code.startswith("L1")
 
     def _extract_brand(self, item: dict[str, Any]) -> Optional[str]:
         return self._first_non_empty(
@@ -460,3 +698,30 @@ class DiaScraper(BaseScraper):
 
         raw_name = parts[-1]
         return raw_name.replace("-", " ").strip().title()
+
+    def _deduplicate_products(
+        self,
+        products: list[ScrapedProduct],
+    ) -> list[ScrapedProduct]:
+        deduplicated: list[ScrapedProduct] = []
+        seen: set[str] = set()
+
+        for product in products:
+            if product.external_id:
+                key = (
+                    f"{product.normalized_supermarket}"
+                    f"::id::{product.external_id}"
+                )
+            else:
+                key = (
+                    f"{product.normalized_supermarket}"
+                    f"::name::{product.normalized_name}"
+                )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            deduplicated.append(product)
+
+        return deduplicated

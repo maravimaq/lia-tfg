@@ -11,6 +11,7 @@ from app.scraping.carrefour_scraper import CarrefourScraper
 from app.scraping.dia_scraper import DiaScraper
 from app.scraping.mercadona_scraper import MercadonaScraper
 from app.scraping.base import ScrapedProduct
+from app.scraping.validators import validate_scraped_product
 
 
 @pytest.fixture
@@ -113,6 +114,211 @@ def test_dia_extract_fields(scrapers):
     assert s._extract_unit(item) == "kg"
     assert s._extract_external_id(item) == "123"
 
+def test_dia_filtra_rutas_catalogo_reales(scrapers):
+    s = scrapers["dia"]
+
+    menu = {
+        "quesos": {
+            "path": "/quesos/c/L101",
+            "parameter": "L1_quesos",
+            "children": {
+                "curado": {
+                    "path": "/quesos/curado/c/L2007",
+                    "parameter": "L2_curado",
+                },
+                "fresco": {
+                    "path": "/quesos/fresco/c/L2008",
+                    "parameter": "L2_fresco",
+                },
+            },
+        }
+    }
+
+    paths = s._extract_category_paths(menu)
+
+    assert paths == [
+        "/quesos/curado/c/L2007",
+        "/quesos/fresco/c/L2008",
+    ]
+
+    assert not s._is_catalog_category_path(
+        "/quesos/c/L101"
+    )
+    assert s._is_catalog_category_path(
+        "/quesos/fresco/c/L2008"
+    )
+    assert not s._is_catalog_category_path(
+        "L2_fresco"
+    )
+
+
+def test_dia_extract_vike_page_context(scrapers):
+    s = scrapers["dia"]
+
+    product = {
+        "brand": "Dia Nuestra Alacena",
+        "display_name": "Jamón cocido extra 200 g",
+        "image": "/product_images/123/123.jpg",
+        "object_id": "123",
+        "sku_id": "123",
+        "prices": {
+            "currency": "EUR",
+            "measure_unit": "KILO",
+            "price": 2.49,
+            "price_per_unit": 12.45,
+        },
+        "url": "/charcuteria/jamon-cocido/p/123",
+    }
+
+    placeholder = {
+        "type": "advertisement",
+    }
+
+    page_context = {
+        "INITIAL_STATE": {
+            "total_items": 21,
+            "l2": {
+                "plp_items": [
+                    product,
+                    placeholder,
+                ]
+            },
+            "pagination": {
+                "pagination": {
+                    "page_number": 1,
+                    "page_size": 20,
+                    "total_pages": 2,
+                }
+            },
+        }
+    }
+
+    html = (
+        "<html><body>"
+        '<script id="vike_pageContext" '
+        'type="application/json">'
+        f"{json.dumps(page_context)}"
+        "</script>"
+        "</body></html>"
+    )
+
+    items, pagination = s._extract_category_page(
+        html
+    )
+
+    assert len(items) == 1
+    assert items[0]["object_id"] == "123"
+    assert pagination["page_number"] == 1
+    assert pagination["page_size"] == 20
+    assert pagination["total_pages"] == 2
+    assert pagination["total_items"] == 21
+
+
+def test_dia_public_pagination_url(scrapers):
+    s = scrapers["dia"]
+
+    path = "/quesos/fresco/c/L2008"
+
+    assert (
+        s._build_products_url(path, page=1)
+        == "https://www.dia.es/quesos/fresco/c/L2008"
+    )
+
+    assert (
+        s._build_products_url(path, page=2)
+        == "https://www.dia.es/quesos/fresco/c/L2008?page=2"
+    )
+
+def test_dia_deduplica_por_external_id(scrapers):
+    s = scrapers["dia"]
+
+    p1 = ScrapedProduct(
+        "Queso parmesano",
+        Decimal("4.99"),
+        "DIA",
+        categoria="Curado",
+        external_id="263575",
+    )
+
+    p2 = ScrapedProduct(
+        "Queso parmesano",
+        Decimal("4.99"),
+        "DIA",
+        categoria="Especialidades",
+        external_id="263575",
+    )
+
+    result = s._deduplicate_products([p1, p2])
+
+    assert len(result) == 1
+    assert result[0].external_id == "263575"
+
+def test_dia_intercala_grupos_de_categorias(scrapers):
+    s = scrapers["dia"]
+
+    groups = [
+        [
+            "/quesos/curado/c/L2007",
+            "/quesos/fresco/c/L2008",
+        ],
+        [
+            "/carnes/vacuno/c/L2013",
+            "/carnes/cerdo/c/L2014",
+        ],
+        [
+            "/frutas/manzanas-y-peras/c/L2032",
+            "/frutas/platanos-y-bananas/c/L2033",
+        ],
+    ]
+
+    result = s._interleave_category_groups(groups)
+
+    assert result == [
+        "/quesos/curado/c/L2007",
+        "/carnes/vacuno/c/L2013",
+        "/frutas/manzanas-y-peras/c/L2032",
+        "/quesos/fresco/c/L2008",
+        "/carnes/cerdo/c/L2014",
+        "/frutas/platanos-y-bananas/c/L2033",
+    ]
+
+def test_validator_acepta_producto_con_pack_multiplicativo():
+    product = ScrapedProduct(
+        nombre="Mermelada de fresa Helios pack 10 x 25 g",
+        precio=Decimal("1.85"),
+        supermercado="DIA",
+    )
+
+    valid, reason = validate_scraped_product(product)
+
+    assert valid is True
+    assert reason is None
+
+
+def test_validator_acepta_bifidus_con_pack():
+    product = ScrapedProduct(
+        nombre="Bífidus natural Dia Láctea 4 x 125 g",
+        precio=Decimal("0.80"),
+        supermercado="DIA",
+    )
+
+    valid, reason = validate_scraped_product(product)
+
+    assert valid is True
+    assert reason is None
+
+
+def test_validator_rechaza_nombre_que_es_solo_medida():
+    product = ScrapedProduct(
+        nombre="10 x 25 g",
+        precio=Decimal("1.85"),
+        supermercado="DIA",
+    )
+
+    valid, reason = validate_scraped_product(product)
+
+    assert valid is False
+    assert reason == "nombre parece ser solo una medida"
 
 def test_mercadona_helpers(scrapers):
     s = scrapers["mercadona"]
