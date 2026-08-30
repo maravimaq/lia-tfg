@@ -15,7 +15,6 @@ import Screen from "@/src/components/Screen";
 import AppInput from "@/src/components/AppInput";
 import AppButton from "@/src/components/AppButton";
 import LogoHeader from "@/src/components/LogoHeader";
-import SocialAuthButton from "@/src/components/SocialAuthButton";
 import LegalModal from "@/src/components/LegalModal";
 import { useAuth } from "@/src/hooks/useAuth";
 import { Colors } from "@/src/constants/colors";
@@ -248,29 +247,6 @@ export default function SignUpScreen() {
           loading={isSubmitting}
           style={{ marginTop: 10 }}
         />
-
-        <View style={styles.dividerWrap}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>O crea una cuenta con</Text>
-          <View style={styles.divider} />
-        </View>
-
-        <View style={styles.socialRow}>
-          <View style={styles.socialItem}>
-            <SocialAuthButton
-              provider="google"
-              label="Google"
-              onPress={() => Alert.alert("Pendiente", "Registro con Google pendiente")}
-            />
-          </View>
-          <View style={styles.socialItem}>
-            <SocialAuthButton
-              provider="apple"
-              label="Apple"
-              onPress={() => Alert.alert("Pendiente", "Registro con Apple pendiente")}
-            />
-          </View>
-        </View>
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>¿Ya tienes una cuenta?</Text>

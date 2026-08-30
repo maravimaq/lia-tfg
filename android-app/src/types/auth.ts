@@ -15,11 +15,6 @@ export type ForgotPasswordPayload = {
   email: string;
 };
 
-export type ResetPasswordPayload = {
-  token: string;
-  nueva_contrasena: string;
-};
-
 export type ForgotPasswordResponse = {
   message: string;
 };

@@ -4,13 +4,11 @@ import string
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.external_auth import verify_apple_id_token, verify_google_id_token
 from app.models.sesion_autenticacion import SesionAutenticacion
 from app.models.user import User
 from app.repositories.role_repository import RoleRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import ExternalUserPayload
 from app.schemas.user import UserCreate
 from app.services.email_service import EmailService
 from app.core.security import (
@@ -99,131 +97,6 @@ class AuthService:
 
         return access_token
 
-    @staticmethod
-    def _create_external_user_if_needed(
-        db: Session,
-        external_user: ExternalUserPayload,
-        proveedor: str,
-    ) -> User:
-        existing_user = UserRepository.get_by_email(db, external_user.email)
-        if existing_user:
-            return existing_user
-
-        user_role = RoleRepository.get_by_name(db, "usuario")
-        if not user_role:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="El rol por defecto 'usuario' no existe"
-            )
-
-        base_username = external_user.nombre_usuario or external_user.email.split("@")[0]
-        username = base_username
-        suffix = 1
-
-        while UserRepository.get_by_username(db, username):
-            username = f"{base_username}{suffix}"
-            suffix += 1
-
-        new_user = User(
-            nombre_usuario=username,
-            nombre_completo=external_user.nombre_completo or username,
-            email=external_user.email,
-            contrasena=hash_password("oauth_placeholder_password"),
-            telefono=None,
-            estado="activo",
-            rol_id=user_role.id_rol,
-            proveedor_auth=proveedor,
-        )
-
-        return UserRepository.create(db, new_user)
-
-    @staticmethod
-    def login_with_google(db: Session, google_id_token: str) -> str:
-        try:
-            token_info = id_token.verify_oauth2_token(
-                google_id_token,
-                google_requests.Request(),
-                settings.google_web_client_id,
-            )
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token de Google no válido"
-            )
-
-        email = token_info.get("email")
-        email_verified = token_info.get("email_verified", False)
-        full_name = token_info.get("name") or "Usuario Google"
-
-        if not email or not email_verified:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="La cuenta de Google no tiene un email válido/verificado"
-            )
-
-        user = UserRepository.get_by_email(db, email)
-
-        if not user:
-            user_role = RoleRepository.get_by_name(db, "usuario")
-
-            if not user_role:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="El rol por defecto 'usuario' no existe"
-                )
-
-            base_username = email.split("@")[0]
-            username = base_username
-            counter = 1
-
-            while UserRepository.get_by_username(db, username):
-                username = f"{base_username}{counter}"
-                counter += 1
-
-            generated_password = hash_password("google-oauth-no-login-local")
-
-            new_user = User(
-                nombre_usuario=username,
-                nombre_completo=full_name,
-                email=email,
-                contrasena=generated_password,
-                telefono=None,
-                estado="activo",
-                rol_id=user_role.id_rol,
-                proveedor_auth="google",
-            )
-
-            user = UserRepository.create(db, new_user)
-
-        if user.estado != "activo":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Usuario inactivo"
-            )
-
-        return create_access_token(data={"sub": user.email})
-
-    @staticmethod
-    def login_with_apple(db: Session, id_token: str) -> str:
-        external_user = verify_apple_id_token(id_token)
-        user = AuthService._create_external_user_if_needed(db, external_user, "apple")
-
-        if user.estado != "activo":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Usuario inactivo"
-            )
-
-        access_token = create_access_token(data={"sub": user.email})
-
-        nueva_sesion = SesionAutenticacion(
-            proveedor="apple",
-            token=access_token,
-            usuario_id=user.id_usuario,
-        )
-        SessionRepository.create(db, nueva_sesion)
-
-        return access_token
 
     @staticmethod
     def logout(db: Session, token: str) -> dict:
@@ -256,17 +129,22 @@ class AuthService:
             )
 
         temporary_password = AuthService._generate_temporary_password()
-        user.contrasena = hash_password(temporary_password)
-        UserRepository.save(db, user)
-        SessionRepository.revoke_all_user_sessions(db, user.id_usuario)
 
         try:
-            EmailService.send_temporary_password_email(user.email, temporary_password)
+            EmailService.send_temporary_password_email(
+                user.email,
+                temporary_password,
+            )
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"No se pudo enviar el correo de recuperación: {str(exc)}"
+                detail=f"No se pudo enviar el correo de recuperación: {str(exc)}",
             ) from exc
+
+        # Solo cambiamos las credenciales si el correo se ha enviado correctamente.
+        user.contrasena = hash_password(temporary_password)
+        UserRepository.save(db, user)
+        SessionRepository.revoke_all_user_sessions(db, user.id_usuario)
 
         return {
             "message": "Si el correo existe en el sistema, te hemos enviado una contraseña temporal."
