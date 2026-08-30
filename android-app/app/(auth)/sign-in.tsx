@@ -9,7 +9,6 @@ import Screen from "@/src/components/Screen";
 import AppInput from "@/src/components/AppInput";
 import AppButton from "@/src/components/AppButton";
 import LogoHeader from "@/src/components/LogoHeader";
-import SocialAuthButton from "@/src/components/SocialAuthButton";
 import { useAuth } from "@/src/hooks/useAuth";
 import { Colors } from "@/src/constants/colors";
 
@@ -94,29 +93,6 @@ export default function SignInScreen() {
           loading={isSubmitting}
           style={{ marginTop: 10 }}
         />
-
-        <View style={styles.dividerWrap}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>O inicia sesión con</Text>
-          <View style={styles.divider} />
-        </View>
-
-        <View style={styles.socialRow}>
-          <View style={styles.socialItem}>
-            <SocialAuthButton
-              provider="google"
-              label="Google"
-              onPress={() => Alert.alert("Pendiente", "Login con Google pendiente")}
-            />
-          </View>
-          <View style={styles.socialItem}>
-            <SocialAuthButton
-              provider="apple"
-              label="Apple"
-              onPress={() => Alert.alert("Pendiente", "Login con Apple pendiente")}
-            />
-          </View>
-        </View>
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>¿No tienes una cuenta?</Text>

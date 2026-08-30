@@ -96,6 +96,42 @@ def test_forgot_password_sends_temporary_password_and_revokes_session(client, mo
     )
     assert new_token
 
+@pytest.mark.integration
+def test_forgot_password_email_failure_keeps_existing_credentials(client, monkeypatch):
+    _, old_token = register_and_login(client)
+
+    def fail_send(_email: str, _temporary_password: str):
+        raise RuntimeError("SMTP no disponible")
+
+    monkeypatch.setattr(
+        EmailService,
+        "send_temporary_password_email",
+        staticmethod(fail_send),
+    )
+
+    response = client.post(
+        "/auth/forgot-password",
+        json={"email": "usuario@example.com"},
+    )
+
+    assert response.status_code == 503
+
+    # Si el correo no se ha podido enviar, la sesión actual debe seguir siendo válida.
+    current_session = client.get(
+        "/users/me",
+        headers=auth_headers(old_token),
+    )
+    assert current_session.status_code == 200
+
+    # Y la contraseña anterior debe seguir funcionando.
+    from app.core.security import verify_password
+    from app.repositories.user_repository import UserRepository
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as db:
+        user = UserRepository.get_by_email(db, "usuario@example.com")
+        assert user is not None
+        assert verify_password("Usuario1234!", user.contrasena)
 
 @pytest.mark.integration
 def test_forgot_password_unknown_email_does_not_disclose_account(client, monkeypatch):
@@ -121,3 +157,13 @@ def test_legacy_reset_password_endpoint_is_gone(client):
         json={"token": "obsolete", "nueva_contrasena": "Nueva1234!"},
     )
     assert response.status_code == 410
+
+
+@pytest.mark.integration
+def test_external_auth_endpoints_are_not_exposed(client):
+    for endpoint in ("/auth/google", "/auth/apple"):
+        response = client.post(
+            endpoint,
+            json={"id_token": "fake-token", "proveedor": "google"},
+        )
+        assert response.status_code == 404

@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import httpx
@@ -64,20 +63,40 @@ def valid_json(reply=None):
     }
 
 
-def test_generate_response_routes_to_ollama_and_openai(monkeypatch):
-    monkeypatch.setattr(ListChatbotAIService, '_should_answer_deterministically', MagicMock(return_value=False))
+def test_generate_response_routes_to_cloudflare_and_ollama(monkeypatch):
+    monkeypatch.setattr(
+        ListChatbotAIService,
+        '_should_answer_deterministically',
+        MagicMock(return_value=False),
+    )
+
+    cloudflare = MagicMock(return_value=ai_response())
     ollama = MagicMock(return_value=ai_response())
-    openai = MagicMock(return_value=ai_response())
-    monkeypatch.setattr(ListChatbotAIService, '_generate_with_ollama', ollama)
-    monkeypatch.setattr(ListChatbotAIService, '_generate_with_openai', openai)
 
-    monkeypatch.setattr(module.settings, 'ai_provider', ' OLLAMA ')
-    ListChatbotAIService.generate_response(user_message='hola', list_context={})
+    monkeypatch.setattr(
+        ListChatbotAIService,
+        '_generate_with_cloudflare',
+        cloudflare,
+    )
+    monkeypatch.setattr(
+        ListChatbotAIService,
+        '_generate_with_ollama',
+        ollama,
+    )
+
+    monkeypatch.setattr(module.settings, 'ai_provider', ' CLOUDFLARE ')
+    ListChatbotAIService.generate_response(
+        user_message='hola',
+        list_context={},
+    )
+    cloudflare.assert_called_once()
+
+    monkeypatch.setattr(module.settings, 'ai_provider', 'ollama')
+    ListChatbotAIService.generate_response(
+        user_message='hola',
+        list_context={},
+    )
     ollama.assert_called_once()
-
-    monkeypatch.setattr(module.settings, 'ai_provider', 'openai')
-    ListChatbotAIService.generate_response(user_message='hola', list_context={})
-    openai.assert_called_once()
 
 
 def test_generate_response_deterministic_precedes_provider(monkeypatch):
@@ -134,56 +153,202 @@ def test_ollama_empty_and_invalid_schema(monkeypatch):
     with pytest.raises(HTTPException, match='respuesta válida'):
         ListChatbotAIService._generate_with_ollama('hola', {})
 
+def test_cloudflare_configuration_errors(monkeypatch):
+    monkeypatch.setattr(module.settings, 'cloudflare_account_id', None)
+    monkeypatch.setattr(module.settings, 'cloudflare_ai_token', None)
 
-def test_openai_configuration_errors(monkeypatch):
-    monkeypatch.setattr(module, 'settings', SimpleNamespace(openai_enabled=False, openai_api_key=None, openai_timeout_seconds=10, openai_model='gpt'))
-    with pytest.raises(HTTPException, match='desactivado'):
-        ListChatbotAIService._generate_with_openai('hola', {})
+    with pytest.raises(HTTPException) as exc:
+        ListChatbotAIService._generate_with_cloudflare('hola', {})
 
-    module.settings.openai_enabled = True
-    module.settings.openai_api_key = None
-    with pytest.raises(HTTPException, match='OPENAI_API_KEY'):
-        ListChatbotAIService._generate_with_openai('hola', {})
+    assert exc.value.status_code == 503
+    assert 'CLOUDFLARE_ACCOUNT_ID' in exc.value.detail
 
-    module.settings.openai_api_key = 'key'
-    monkeypatch.setattr(module, 'OpenAI', None)
-    with pytest.raises(HTTPException, match='dependencia openai'):
-        ListChatbotAIService._generate_with_openai('hola', {})
+    monkeypatch.setattr(module.settings, 'cloudflare_account_id', 'account')
 
+    with pytest.raises(HTTPException) as exc:
+        ListChatbotAIService._generate_with_cloudflare('hola', {})
 
-def install_fake_openai(monkeypatch, *, parsed=None, error=None):
-    parse = MagicMock(side_effect=error)
-    if error is None:
-        parse.return_value = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(parsed=parsed))])
-    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(parse=parse)))
-    factory = MagicMock(return_value=fake_client)
-    monkeypatch.setattr(module, 'OpenAI', factory)
-    monkeypatch.setattr(module, 'settings', SimpleNamespace(openai_enabled=True, openai_api_key='key', openai_timeout_seconds=10, openai_model='gpt'))
-    return parse
+    assert exc.value.status_code == 503
+    assert 'CLOUDFLARE_AI_TOKEN' in exc.value.detail
 
 
-def test_openai_success_and_none(monkeypatch):
-    parsed = ai_response()
-    parse = install_fake_openai(monkeypatch, parsed=parsed)
-    result = ListChatbotAIService._generate_with_openai('hola', context())
-    assert result.reply == parsed.reply
-    assert parse.call_args.kwargs['response_format'] is ListChatAIResponse
+def configure_cloudflare(monkeypatch):
+    monkeypatch.setattr(
+        module.settings,
+        'cloudflare_account_id',
+        'account-id',
+    )
+    monkeypatch.setattr(
+        module.settings,
+        'cloudflare_ai_token',
+        'token',
+    )
+    monkeypatch.setattr(
+        module.settings,
+        'cloudflare_ai_model',
+        '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    )
+    monkeypatch.setattr(
+        module.settings,
+        'cloudflare_ai_timeout_seconds',
+        10,
+    )
 
-    install_fake_openai(monkeypatch, parsed=None)
-    with pytest.raises(HTTPException, match='estructurada'):
-        ListChatbotAIService._generate_with_openai('hola', context())
+
+def test_cloudflare_success(monkeypatch):
+    configure_cloudflare(monkeypatch)
+
+    _, response = fake_http_client(
+        monkeypatch,
+        json_data={
+            'result': {
+                'response': valid_json(),
+            }
+        },
+    )
+
+    result = ListChatbotAIService._generate_with_cloudflare(
+        'hola',
+        context(),
+    )
+
+    assert result.confidence == 0.95
+    response.raise_for_status.assert_called_once()
 
 
-def test_openai_provider_and_validation_errors(monkeypatch):
-    install_fake_openai(monkeypatch, error=module.OpenAIError('api'))
-    with pytest.raises(HTTPException, match='OpenAI'):
-        ListChatbotAIService._generate_with_openai('hola', {})
+def test_cloudflare_choices_fallback(monkeypatch):
+    configure_cloudflare(monkeypatch)
 
-    validation_error = ValidationError.from_exception_data('ListChatAIResponse', [])
-    install_fake_openai(monkeypatch, error=validation_error)
+    fake_http_client(
+        monkeypatch,
+        json_data={
+            'result': {
+                'choices': [
+                    {
+                        'message': {
+                            'content': __import__('json').dumps(
+                                valid_json()
+                            )
+                        }
+                    }
+                ]
+            }
+        },
+    )
+
+    result = ListChatbotAIService._generate_with_cloudflare(
+        'hola',
+        context(),
+    )
+
+    assert result.reply
+
+
+def test_cloudflare_connection_http_and_generic_errors(monkeypatch):
+    configure_cloudflare(monkeypatch)
+
+    request = httpx.Request(
+        'POST',
+        'https://api.cloudflare.com/client/v4/test',
+    )
+
+    fake_http_client(
+        monkeypatch,
+        post_error=httpx.ConnectError(
+            'down',
+            request=request,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        ListChatbotAIService._generate_with_cloudflare('hola', {})
+
+    assert exc.value.status_code == 503
+
+    response = httpx.Response(
+        500,
+        request=request,
+        text='boom',
+    )
+
+    fake_http_client(
+        monkeypatch,
+        raise_error=httpx.HTTPStatusError(
+            'bad',
+            request=request,
+            response=response,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        ListChatbotAIService._generate_with_cloudflare('hola', {})
+
+    assert exc.value.status_code == 502
+    assert 'boom' in exc.value.detail
+
+    fake_http_client(
+        monkeypatch,
+        post_error=httpx.ReadError(
+            'read',
+            request=request,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        ListChatbotAIService._generate_with_cloudflare('hola', {})
+
+    assert exc.value.status_code == 502
+
+
+def test_cloudflare_invalid_responses(monkeypatch):
+    configure_cloudflare(monkeypatch)
+
+    fake_http_client(
+        monkeypatch,
+        json_data={'result': None},
+    )
+
+    with pytest.raises(HTTPException, match='resultado válido'):
+        ListChatbotAIService._generate_with_cloudflare(
+            'hola',
+            {},
+        )
+
+    fake_http_client(
+        monkeypatch,
+        json_data={'result': {}},
+    )
+
+    with pytest.raises(
+        HTTPException,
+        match='respuesta estructurada',
+    ):
+        ListChatbotAIService._generate_with_cloudflare(
+            'hola',
+            {},
+        )
+
+    invalid = {
+        'intent': 'no-existe',
+        'reply': 'respuesta',
+        'suggestions': [],
+        'confidence': 2,
+    }
+
+    fake_http_client(
+        monkeypatch,
+        json_data={
+            'result': {
+                'response': invalid,
+            }
+        },
+    )
+
     with pytest.raises(HTTPException, match='respuesta válida'):
-        ListChatbotAIService._generate_with_openai('hola', {})
-
+        ListChatbotAIService._generate_with_cloudflare(
+            'hola',
+            {},
+        )
 
 def test_postprocess_low_weak_and_original(monkeypatch):
     fallback = ai_response(intent='analizar_lista', confidence=.8)

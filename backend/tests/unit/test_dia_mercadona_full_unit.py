@@ -66,29 +66,89 @@ def test_dia_scrape_success_empty_and_failures(monkeypatch):
 
 
 def test_dia_get_categories_and_products(monkeypatch):
-    scraper = DiaScraper(user_agent='ua', max_pages_per_category=3, delay_seconds=0)
-    scraper.get_json = AsyncMock(return_value={
-        'menu_analytics': {
-            'one': {'path':' /leche/c/L1 ', 'children': {'a': {'parameter':'/arroz/c/L2'}}},
-            'two': {'path':'/leche/c/L1'},
-        }
-    })
-    assert asyncio.run(scraper.get_category_paths()) == ['/leche/c/L1','/arroz/c/L2']
+    scraper = DiaScraper(
+        user_agent="ua",
+        max_pages_per_category=3,
+        delay_seconds=0,
+    )
 
-    scraper.get_json = AsyncMock(return_value={'menu_analytics': []})
+    scraper.get_json = AsyncMock(
+        return_value={
+            "menu_analytics": {
+                "one": {
+                    "path": "/quesos/c/L101",
+                    "children": {
+                        "a": {
+                            "path": "/quesos/curado/c/L2007",
+                        }
+                    },
+                },
+                "two": {
+                    "path": "/carnes/c/L102",
+                    "children": {
+                        "a": {
+                            "path": "/carnes/vacuno/c/L2013",
+                        }
+                    },
+                },
+            }
+        }
+    )
+
+    assert asyncio.run(scraper.get_category_paths()) == [
+        "/quesos/curado/c/L2007",
+        "/carnes/vacuno/c/L2013",
+    ]
+
+    scraper.get_json = AsyncMock(
+        return_value={"menu_analytics": []}
+    )
     assert asyncio.run(scraper.get_category_paths()) == []
 
-    scraper.get_json = AsyncMock(side_effect=[{'plp_items':[valid_dia_item()]}, {'plp_items':[]}])
-    products, rejected = asyncio.run(scraper.get_products_by_category('/leche/c/L1'))
-    assert len(products) == 1 and rejected == 0
+    scraper.get_text = AsyncMock(
+        return_value="<html></html>"
+    )
 
-    scraper.get_json = AsyncMock(side_effect=http_error(404))
-    assert asyncio.run(scraper.get_products_by_category('/x')) == ([],0)
+    monkeypatch.setattr(
+        scraper,
+        "_extract_category_page",
+        MagicMock(
+            return_value=(
+                [valid_dia_item()],
+                {
+                    "page_number": 1,
+                    "page_size": 20,
+                    "total_pages": 1,
+                },
+            )
+        ),
+    )
 
-    scraper.get_json = AsyncMock(side_effect=http_error(500))
+    products, rejected = asyncio.run(
+        scraper.get_products_by_category(
+            "/quesos/curado/c/L2007"
+        )
+    )
+
+    assert len(products) == 1
+    assert rejected == 0
+
+    scraper.get_text = AsyncMock(
+        side_effect=http_error(404)
+    )
+
+    assert asyncio.run(
+        scraper.get_products_by_category("/x")
+    ) == ([], 0)
+
+    scraper.get_text = AsyncMock(
+        side_effect=http_error(500)
+    )
+
     with pytest.raises(httpx.HTTPStatusError):
-        asyncio.run(scraper.get_products_by_category('/x'))
-
+        asyncio.run(
+            scraper.get_products_by_category("/x")
+        )
 
 def test_dia_parse_items_and_item_branches(monkeypatch):
     scraper = DiaScraper(user_agent='ua')
@@ -119,8 +179,28 @@ def test_dia_helpers():
     scraper = DiaScraper(user_agent='ua', cookie='a=b')
     assert scraper._dia_headers()['Cookie'] == 'a=b'
     assert scraper._build_products_url('x?sort=a', page=2).endswith('&page=2')
-    paths = scraper._extract_category_paths({'a':{'path':'/a','parameter':'/p','children':{'x':{'path':'/b'}}}, 'bad':'x'})
-    assert paths == ['/a','/p','/b']
+    paths = scraper._extract_category_paths(
+        {
+            "a": {
+                "path": "/quesos/c/L101",
+                "parameter": "L1_quesos",
+                "children": {
+                    "x": {
+                        "path": "/quesos/curado/c/L2007",
+                    },
+                    "y": {
+                        "path": "/quesos/fresco/c/L2008",
+                    },
+                },
+            },
+            "bad": "x",
+        }
+    )
+
+    assert paths == [
+        "/quesos/curado/c/L2007",
+        "/quesos/fresco/c/L2008",
+    ]
     assert scraper._extract_brand({'marca':'M'}) == 'M'
     assert scraper._extract_unit({'measure_unit':'kg'}) == 'kg'
     assert scraper._extract_format({'packaging':'caja'}) == 'caja'

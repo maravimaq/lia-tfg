@@ -47,6 +47,75 @@ def test_catalog_search_compare_and_crud(client):
 
     delete = client.delete(f"/productos/{milk_b['id_producto']}")
     assert delete.status_code == 200
+    
+@pytest.mark.integration
+def test_catalog_search_prioritizes_name_relevance_before_price(client):
+    milk_a = create_product(
+        client,
+        name="Leche entera 1L",
+        price="1.25",
+        supermarket="Mercadona",
+    )
+    milk_b = create_product(
+        client,
+        name="Leche semidesnatada 1L",
+        price="1.10",
+        supermarket="DIA",
+    )
+    cookies = create_product(
+        client,
+        name="Galletas con leche",
+        price="0.50",
+        supermarket="Carrefour",
+    )
+    coffee = create_product(
+        client,
+        name="Café con leche",
+        price="0.75",
+        supermarket="Alcampo",
+    )
+
+    search = client.get(
+        "/productos/search",
+        params={
+            "nombre": "leche",
+            "orden_precio": "asc",
+        },
+    )
+
+    assert search.status_code == 200
+
+    result_ids = [
+        item["id_producto"]
+        for item in search.json()
+    ]
+
+    assert result_ids.index(milk_b["id_producto"]) < result_ids.index(
+        cookies["id_producto"]
+    )
+    assert result_ids.index(milk_a["id_producto"]) < result_ids.index(
+        cookies["id_producto"]
+    )
+    assert result_ids.index(milk_b["id_producto"]) < result_ids.index(
+        coffee["id_producto"]
+    )
+    assert result_ids.index(milk_a["id_producto"]) < result_ids.index(
+        coffee["id_producto"]
+    )
+
+    compare = client.get(
+        "/productos/comparar",
+        params={"nombre": "leche"},
+    )
+
+    assert compare.status_code == 200
+
+    prices = [
+        Decimal(item["precio_unitario"])
+        for item in compare.json()
+    ]
+
+    assert prices == sorted(prices)
 
 
 @pytest.mark.integration

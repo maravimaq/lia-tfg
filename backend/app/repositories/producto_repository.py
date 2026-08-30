@@ -41,27 +41,64 @@ class ProductoRepository:
         categoria: str | None = None,
         supermercado: str | None = None,
         marca: str | None = None,
-        orden_precio: str | None = None
+        orden_precio: str | None = None,
+        ordenar_relevancia: bool = True,
     ) -> list[Producto]:
 
         query = db.query(Producto)
 
-        if nombre:
-            query = query.filter(Producto.nombre.ilike(f"%{nombre}%"))
+        relevance = None
+        clean_name = nombre.strip() if nombre else None
+
+        if clean_name:
+            query = query.filter(
+                Producto.nombre.ilike(f"%{clean_name}%")
+            )
+
+            lowered_name = clean_name.lower()
+            name_lower = func.lower(Producto.nombre)
+
+            relevance = case(
+                # "Leche"
+                (name_lower == lowered_name, 0),
+
+                # "Leche entera", "Leche semidesnatada"...
+                (name_lower.like(f"{lowered_name}%"), 1),
+
+                # "Café con leche", "Galletas de leche"...
+                (name_lower.like(f"% {lowered_name}%"), 2),
+
+                # cualquier otra coincidencia parcial
+                else_=3,
+            )
 
         if categoria:
-            query = query.filter(Producto.categoria.ilike(f"%{categoria}%"))
+            query = query.filter(
+                Producto.categoria.ilike(f"%{categoria}%")
+            )
 
         if supermercado:
-            query = query.filter(Producto.supermercado.ilike(f"%{supermercado}%"))
+            query = query.filter(
+                Producto.supermercado.ilike(f"%{supermercado}%")
+            )
 
         if marca:
-            query = query.filter(Producto.marca.ilike(f"%{marca}%"))
+            query = query.filter(
+                Producto.marca.ilike(f"%{marca}%")
+            )
+
+        order_by = []
+
+        if ordenar_relevancia and relevance is not None:
+            order_by.append(relevance.asc())
 
         if orden_precio == "asc":
-            query = query.order_by(Producto.precio_unitario.asc())
+            order_by.append(Producto.precio_unitario.asc())
         elif orden_precio == "desc":
-            query = query.order_by(Producto.precio_unitario.desc())
+            order_by.append(Producto.precio_unitario.desc())
+
+        if order_by:
+            query = query.order_by(*order_by)
 
         return query.all()
 

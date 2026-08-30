@@ -125,5 +125,6 @@ class ProductoService:
         return ProductoRepository.search(
             db,
             nombre=nombre,
-            orden_precio="asc"
+            orden_precio="asc",
+            ordenar_relevancia=False
         )

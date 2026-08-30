@@ -129,6 +129,57 @@ def test_external_bot_link_and_add_product_flow(client):
     assert len(detail.json()["productos"]) == 1
     assert detail.json()["productos"][0]["cantidad"] == 2
 
+@pytest.mark.integration
+def test_external_bot_compare_does_not_mix_different_units(client):
+    _, token = register_and_login(client)
+
+    create_product(
+        client,
+        name="Arroz cocido integral",
+        price="1.05",
+        unit="VASITOS",
+    )
+    create_product(
+        client,
+        name="Arroz redondo",
+        price="1.20",
+        unit="KG",
+    )
+
+    link_code = client.post(
+        "/external-bot/link-code",
+        headers=auth_headers(token),
+        json={"plataforma": "telegram"},
+    )
+    assert link_code.status_code == 200, link_code.text
+    code = link_code.json()["codigo"]
+
+    from app.services.external_bot_service import ExternalBotService
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as db:
+        linked = ExternalBotService.process_message(
+            db,
+            "telegram",
+            "telegram-compare-user",
+            f"/start {code}",
+        )
+        assert "vinculada" in linked.reply.lower()
+
+        comparison = ExternalBotService.process_message(
+            db,
+            "telegram",
+            "telegram-compare-user",
+            "comparar arroz",
+        )
+
+        reply = comparison.reply.lower()
+
+        assert comparison.action == "comparison_shown"
+        assert "unidades distintas" in reply
+        assert "vasitos" in reply
+        assert "kg" in reply
+        assert "opción más barata por cada unidad" in reply
 
 @pytest.mark.integration
 def test_telegram_webhook_rejects_bad_secret(client):

@@ -4,7 +4,6 @@ import pytest
 
 from app.scraping.base import ScrapedProduct
 from app.scraping.validators import (
-    has_product_hint,
     validate_product_name,
     validate_product_price,
     validate_scraped_product,
@@ -59,12 +58,6 @@ def test_validate_product_price_acepta_rango(price):
 )
 def test_validate_product_price_rechaza_fuera_de_rango(price, reason):
     assert validate_product_price(price) == (False, reason)
-
-
-def test_has_product_hint_detecta_palabras_de_producto():
-    assert has_product_hint("caja de leche 20 x 30 cm") is True
-    assert has_product_hint("estructura 20 x 30 cm") is False
-
 
 def test_validate_scraped_product_valida_todo_el_objeto():
     valid = ScrapedProduct("Leche entera", Decimal("1.20"), "Mercadona")

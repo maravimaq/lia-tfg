@@ -114,12 +114,13 @@ class ScrapingRunner:
         dia_max_categories: int = 20,
         dia_max_pages_per_category: int = 3,
         mercadona_max_categories: int = 40,
-        carrefour_max_urls: int = 3,
+        carrefour_max_urls: int = 8,
+        carrefour_max_pages_per_url: int = 5,
         carrefour_max_products_per_url: int = 40,
         carrefour_use_playwright_fallback: bool = True,
-        aldi_max_listing_urls: int = 3,
+        aldi_max_listing_urls: int = 1,
         aldi_max_article_links: int = 120,
-        aldi_max_products: int = 120,
+        aldi_max_products: int = 250,
         aldi_use_playwright_fallback: bool = True,
         alcampo_max_urls: int = 3,
         alcampo_max_products_per_url: int = 80,
@@ -136,6 +137,7 @@ class ScrapingRunner:
         self.mercadona_max_categories = mercadona_max_categories
 
         self.carrefour_max_urls = carrefour_max_urls
+        self.carrefour_max_pages_per_url = carrefour_max_pages_per_url
         self.carrefour_max_products_per_url = carrefour_max_products_per_url
         self.carrefour_use_playwright_fallback = carrefour_use_playwright_fallback
 
@@ -242,6 +244,7 @@ class ScrapingRunner:
             user_agent=self.user_agent,
             max_urls=self.carrefour_max_urls,
             max_products_per_url=self.carrefour_max_products_per_url,
+            max_pages_per_url=self.carrefour_max_pages_per_url,
             use_playwright_fallback=self.carrefour_use_playwright_fallback,
         )
 

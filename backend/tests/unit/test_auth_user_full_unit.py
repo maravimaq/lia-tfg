@@ -6,7 +6,6 @@ import pytest
 from fastapi import HTTPException
 
 from app.schemas.account_request import AccountActionRequestCreate
-from app.schemas.auth import ExternalUserPayload
 from app.schemas.bot_config import BotConfigUpdate
 from app.schemas.follow import FollowRequestAction
 from app.schemas.user import UserUpdate
@@ -24,124 +23,6 @@ def test_register_missing_default_role(monkeypatch, db):
     with pytest.raises(HTTPException) as exc:
         AuthService.register(db, data)
     assert exc.value.status_code == 500
-
-
-def test_create_external_user_existing(monkeypatch, db):
-    existing = SimpleNamespace(id_usuario=1)
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_email', MagicMock(return_value=existing))
-    payload = ExternalUserPayload(email='a@b.com', nombre_usuario='a', nombre_completo='A')
-    assert AuthService._create_external_user_if_needed(db, payload, 'apple') is existing
-
-
-def test_create_external_user_unique_username(monkeypatch, db):
-    role = SimpleNamespace(id_rol=2)
-    created = SimpleNamespace(id_usuario=9)
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_email', MagicMock(return_value=None))
-    monkeypatch.setattr(auth_module.RoleRepository, 'get_by_name', MagicMock(return_value=role))
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_username', MagicMock(side_effect=[object(), object(), None]))
-    monkeypatch.setattr(auth_module, 'hash_password', MagicMock(return_value='HASH'))
-    model = MagicMock(return_value=SimpleNamespace())
-    monkeypatch.setattr(auth_module, 'User', model)
-    monkeypatch.setattr(auth_module.UserRepository, 'create', MagicMock(return_value=created))
-    payload = ExternalUserPayload(email='a@b.com', nombre_usuario='alpha', nombre_completo=None)
-
-    assert AuthService._create_external_user_if_needed(db, payload, 'apple') is created
-    assert model.call_args.kwargs['nombre_usuario'] == 'alpha2'
-    assert model.call_args.kwargs['nombre_completo'] == 'alpha2'
-
-
-def test_create_external_user_missing_role(monkeypatch, db):
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_email', MagicMock(return_value=None))
-    monkeypatch.setattr(auth_module.RoleRepository, 'get_by_name', MagicMock(return_value=None))
-    with pytest.raises(HTTPException) as exc:
-        AuthService._create_external_user_if_needed(db, ExternalUserPayload(email='a@b.com'), 'apple')
-    assert exc.value.status_code == 500
-
-
-def google_globals(monkeypatch, token_info=None, error=None):
-    verifier = MagicMock(side_effect=error, return_value=token_info)
-    monkeypatch.setattr(auth_module, 'id_token', SimpleNamespace(verify_oauth2_token=verifier), raising=False)
-    monkeypatch.setattr(auth_module, 'google_requests', SimpleNamespace(Request=MagicMock), raising=False)
-    monkeypatch.setattr(auth_module, 'settings', SimpleNamespace(google_web_client_id='client'), raising=False)
-    return verifier
-
-
-def test_google_login_invalid_token(monkeypatch, db):
-    google_globals(monkeypatch, error=RuntimeError('bad'))
-    with pytest.raises(HTTPException) as exc:
-        AuthService.login_with_google(db, 'bad')
-    assert exc.value.status_code == 401
-
-
-@pytest.mark.parametrize('token_info', [
-    {},
-    {'email': 'a@b.com', 'email_verified': False},
-])
-def test_google_login_invalid_email(monkeypatch, db, token_info):
-    google_globals(monkeypatch, token_info=token_info)
-    with pytest.raises(HTTPException) as exc:
-        AuthService.login_with_google(db, 'token')
-    assert exc.value.status_code == 401
-
-
-def test_google_login_existing_user(monkeypatch, db):
-    google_globals(monkeypatch, token_info={'email': 'a@b.com', 'email_verified': True, 'name': 'A'})
-    user = SimpleNamespace(id_usuario=1, email='a@b.com', estado='activo')
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_email', MagicMock(return_value=user))
-    monkeypatch.setattr(auth_module, 'create_access_token', MagicMock(return_value='TOKEN'))
-    assert AuthService.login_with_google(db, 'token') == 'TOKEN'
-
-
-def test_google_login_creates_user_and_resolves_username(monkeypatch, db):
-    google_globals(monkeypatch, token_info={'email': 'a@b.com', 'email_verified': True})
-    role = SimpleNamespace(id_rol=2)
-    created = SimpleNamespace(id_usuario=2, email='a@b.com', estado='activo')
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_email', MagicMock(return_value=None))
-    monkeypatch.setattr(auth_module.RoleRepository, 'get_by_name', MagicMock(return_value=role))
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_username', MagicMock(side_effect=[object(), None]))
-    monkeypatch.setattr(auth_module, 'hash_password', MagicMock(return_value='HASH'))
-    model = MagicMock(return_value=SimpleNamespace())
-    monkeypatch.setattr(auth_module, 'User', model)
-    monkeypatch.setattr(auth_module.UserRepository, 'create', MagicMock(return_value=created))
-    monkeypatch.setattr(auth_module, 'create_access_token', MagicMock(return_value='TOKEN'))
-
-    assert AuthService.login_with_google(db, 'token') == 'TOKEN'
-    assert model.call_args.kwargs['nombre_usuario'] == 'a1'
-    assert model.call_args.kwargs['nombre_completo'] == 'Usuario Google'
-
-
-def test_google_login_missing_role_and_inactive(monkeypatch, db):
-    google_globals(monkeypatch, token_info={'email': 'a@b.com', 'email_verified': True})
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_email', MagicMock(return_value=None))
-    monkeypatch.setattr(auth_module.RoleRepository, 'get_by_name', MagicMock(return_value=None))
-    with pytest.raises(HTTPException) as exc:
-        AuthService.login_with_google(db, 'token')
-    assert exc.value.status_code == 500
-
-    monkeypatch.setattr(auth_module.UserRepository, 'get_by_email', MagicMock(return_value=SimpleNamespace(estado='inactivo')))
-    with pytest.raises(HTTPException) as exc:
-        AuthService.login_with_google(db, 'token')
-    assert exc.value.status_code == 403
-
-
-def test_apple_login_success_and_inactive(monkeypatch, db):
-    payload = ExternalUserPayload(email='apple@b.com', nombre_usuario='apple', nombre_completo='Apple')
-    monkeypatch.setattr(auth_module, 'verify_apple_id_token', MagicMock(return_value=payload))
-    active = SimpleNamespace(id_usuario=3, email='apple@b.com', estado='activo')
-    monkeypatch.setattr(AuthService, '_create_external_user_if_needed', MagicMock(return_value=active))
-    monkeypatch.setattr(auth_module, 'create_access_token', MagicMock(return_value='APPLE'))
-    session_model = MagicMock(return_value=SimpleNamespace())
-    monkeypatch.setattr(auth_module, 'SesionAutenticacion', session_model)
-    create_session = MagicMock()
-    monkeypatch.setattr(auth_module.SessionRepository, 'create', create_session)
-
-    assert AuthService.login_with_apple(db, 'id') == 'APPLE'
-    create_session.assert_called_once()
-
-    monkeypatch.setattr(AuthService, '_create_external_user_if_needed', MagicMock(return_value=SimpleNamespace(estado='inactivo')))
-    with pytest.raises(HTTPException) as exc:
-        AuthService.login_with_apple(db, 'id')
-    assert exc.value.status_code == 403
 
 
 def test_forgot_external_and_email_failure(monkeypatch, db):

@@ -45,11 +45,16 @@ class Settings(BaseSettings):
     password_reset_url: str = "lia://reset-password"
 
     # IA
-    # Valores admitidos actualmente: ollama, openai o mock.
-    ai_provider: str = "ollama"
-    openai_api_key: str | None = None
+    # Valores admitidos: cloudflare, ollama o mock.
+    ai_provider: str = "cloudflare"
 
-    # Ollama
+    # Cloudflare Workers AI
+    cloudflare_account_id: str | None = None
+    cloudflare_ai_token: str | None = None
+    cloudflare_ai_model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    cloudflare_ai_timeout_seconds: int = 90
+
+    # Ollama (opcional para desarrollo local)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:3b"
     ollama_timeout_seconds: int = 300
@@ -69,14 +74,15 @@ class Settings(BaseSettings):
     mercadona_max_categories: int = 40
 
     # Carrefour
-    carrefour_max_urls: int = 3
+    carrefour_max_urls: int = 8
     carrefour_max_products_per_url: int = 40
+    carrefour_max_pages_per_url: int = 5
     carrefour_use_playwright_fallback: bool = True
 
     # ALDI
-    aldi_max_listing_urls: int = 3
+    aldi_max_listing_urls: int = 1
     aldi_max_article_links: int = 120
-    aldi_max_products: int = 120
+    aldi_max_products: int = 250
     aldi_use_playwright_fallback: bool = True
 
     # Alcampo

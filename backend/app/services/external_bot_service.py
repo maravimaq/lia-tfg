@@ -441,7 +441,12 @@ class ExternalBotService:
         session: ExternalBotSession,
         query: str,
     ) -> ExternalBotResponse:
-        products = ProductoRepository.search_by_text(db, query, limit=8, orden_precio="asc")
+        products = ProductoRepository.search_by_text(
+            db,
+            query,
+            limit=8,
+            orden_precio="asc",
+        )
 
         if not products:
             return ExternalBotService._reply(
@@ -451,17 +456,72 @@ class ExternalBotService:
                 action="compare_not_found",
             )
 
-        cheapest = products[0]
+        products_by_unit: dict[str, list] = {}
+
+        for product in products:
+            unit = (product.unidad_medida or "").strip().upper()
+            unit_key = unit or "SIN UNIDAD"
+
+            products_by_unit.setdefault(unit_key, []).append(product)
+
+        # Si todos los resultados utilizan la misma unidad,
+        # sí podemos compararlos directamente.
+        if len(products_by_unit) == 1:
+            unit_products = next(iter(products_by_unit.values()))
+            cheapest = min(
+                unit_products,
+                key=lambda product: product.precio_unitario,
+            )
+
+            reply = (
+                f"La opción más barata que he encontrado para '{query}' es:\n"
+                f"{ExternalBotService._product_label(cheapest)}\n\n"
+                "Otras opciones:\n"
+                + "\n".join(
+                    f"{index}. {ExternalBotService._product_label(product)}"
+                    for index, product in enumerate(unit_products, start=1)
+                )
+            )
+
+            return ExternalBotService._reply(
+                db,
+                session,
+                reply,
+                action="comparison_shown",
+            )
+
+        # Si hay unidades diferentes (KG, L, VASITOS...), no se pueden
+        # comparar directamente. Mostramos el más barato de cada unidad.
+        cheapest_by_unit = []
+
+        for unit, unit_products in products_by_unit.items():
+            cheapest = min(
+                unit_products,
+                key=lambda product: product.precio_unitario,
+            )
+            cheapest_by_unit.append((unit, cheapest))
+
         reply = (
-            f"La opción más barata que he encontrado para '{query}' es:\n"
-            f"{ExternalBotService._product_label(cheapest)}\n\n"
-            "Otras opciones:\n"
+            f"He encontrado opciones para '{query}' con unidades distintas, "
+            "por lo que no es correcto comparar sus precios directamente.\n\n"
+            "Opción más barata por cada unidad:\n"
+            + "\n".join(
+                f"• {unit}: {ExternalBotService._product_label(product)}"
+                for unit, product in cheapest_by_unit
+            )
+            + "\n\nOtras opciones encontradas:\n"
             + "\n".join(
                 f"{index}. {ExternalBotService._product_label(product)}"
                 for index, product in enumerate(products, start=1)
             )
         )
-        return ExternalBotService._reply(db, session, reply, action="comparison_shown")
+
+        return ExternalBotService._reply(
+            db,
+            session,
+            reply,
+            action="comparison_shown",
+        )
 
     @staticmethod
     def _help(db: Session, session: ExternalBotSession) -> ExternalBotResponse:

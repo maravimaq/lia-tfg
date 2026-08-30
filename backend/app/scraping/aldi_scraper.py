@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import asyncio
 import logging
 import re
@@ -48,9 +49,7 @@ class AldiScraper(BaseScraper):
     base_url = "https://www.aldi.es"
 
     START_URLS = [
-        "https://www.aldi.es/ofertas.html",
-        "https://www.aldi.es/ofertas-proxima-semana.html",
-        "https://www.aldi.es/folleto.html",
+        "https://www.aldi.es/ofertas.html"
     ]
 
     ARTICLE_LINK_RE = re.compile(
@@ -110,15 +109,15 @@ class AldiScraper(BaseScraper):
         products: list[ScrapedProduct] = []
         rejected_count = 0
         processed_listing_urls = 0
-        processed_article_urls = 0
         playwright_urls = 0
         blocked_urls = 0
+        raw_items: list[dict[str, Any]] = []
 
         try:
-            article_urls: list[str] = []
-
             for listing_url in self.START_URLS[: self.max_listing_urls]:
-                html, used_playwright, was_blocked = await self._get_html(listing_url)
+                html, used_playwright, was_blocked = await self._get_html(
+                    listing_url
+                )
 
                 if was_blocked:
                     blocked_urls += 1
@@ -131,60 +130,43 @@ class AldiScraper(BaseScraper):
 
                 processed_listing_urls += 1
 
-                article_urls.extend(
-                    self._extract_article_links(
-                        html,
-                        source_url=listing_url,
+                items = self._extract_offer_items(html)
+
+                # El HTML HTTP puede contener la carcasa de Next.js
+                # sin todos los datos. Si no encontramos ofertas,
+                # forzamos Playwright una vez.
+                if (
+                    not items
+                    and self.use_playwright_fallback
+                    and not used_playwright
+                ):
+                    playwright_html = await self._get_text_with_playwright(
+                        listing_url
                     )
-                )
 
-            article_urls = self._unique_urls(article_urls)[: self.max_article_links]
+                    if playwright_html:
+                        playwright_urls += 1
+                        items = self._extract_offer_items(
+                            playwright_html
+                        )
 
-            if not article_urls:
-                return ScraperRunResult(
-                    supermercado=self.supermercado,
-                    status="empty",
-                    products=[],
-                    detected_count=0,
-                    accepted_count=0,
-                    rejected_count=0,
-                    message="ALDI procesado, pero no se encontraron fichas .article.html.",
-                    metadata={
-                        "mode": "aldi_article_pages",
-                        "processed_listing_urls": processed_listing_urls,
-                        "processed_article_urls": processed_article_urls,
-                        "playwright_urls": playwright_urls,
-                        "blocked_urls": blocked_urls,
-                        "article_links": 0,
-                        "note": "ALDI expone principalmente ofertas/folletos, no catálogo permanente completo.",
-                    },
-                )
+                raw_items.extend(items)
 
-            for article_url in article_urls:
+            for item in raw_items:
                 if len(products) >= self.max_products:
                     break
 
-                html, used_playwright, was_blocked = await self._get_html(article_url)
-
-                if was_blocked:
-                    blocked_urls += 1
-
-                if used_playwright:
-                    playwright_urls += 1
-
-                if not html:
-                    continue
-
-                processed_article_urls += 1
-
                 try:
-                    product = self._parse_article_page(
-                        html,
-                        source_url=article_url,
+                    product = self._build_product_from_offer_item(
+                        item,
+                        source_url=self.START_URLS[0],
                     )
                 except Exception as exc:
                     rejected_count += 1
-                    logger.debug("Ficha ALDI rechazada por parseo: %s", exc)
+                    logger.debug(
+                        "Oferta ALDI rechazada por parseo: %s",
+                        exc,
+                    )
                     continue
 
                 is_valid, reason = validate_scraped_product(product)
@@ -192,7 +174,8 @@ class AldiScraper(BaseScraper):
                 if not is_valid:
                     rejected_count += 1
                     logger.debug(
-                        "Producto ALDI inválido: nombre=%r precio=%r motivo=%s",
+                        "Producto ALDI inválido: "
+                        "nombre=%r precio=%r motivo=%s",
                         product.nombre,
                         product.precio,
                         reason,
@@ -201,33 +184,32 @@ class AldiScraper(BaseScraper):
 
                 products.append(product)
 
-                if self.delay_seconds > 0:
-                    await asyncio.sleep(self.delay_seconds)
-
             products = self._deduplicate_products(products)
 
             return ScraperRunResult(
                 supermercado=self.supermercado,
                 status="success" if products else "empty",
                 products=products,
-                detected_count=len(products) + rejected_count,
+                detected_count=len(raw_items),
                 accepted_count=len(products),
                 rejected_count=rejected_count,
                 message=(
-                    f"ALDI procesado: {processed_listing_urls} páginas de ofertas, "
-                    f"{processed_article_urls} fichas, "
+                    f"ALDI procesado: "
+                    f"{processed_listing_urls} página de ofertas, "
+                    f"{len(raw_items)} ofertas detectadas, "
                     f"{len(products)} productos aceptados."
                 ),
                 metadata={
-                    "mode": "aldi_article_pages",
+                    "mode": "aldi_next_data_offers",
                     "processed_listing_urls": processed_listing_urls,
-                    "processed_article_urls": processed_article_urls,
-                    "article_links": len(article_urls),
+                    "raw_offers": len(raw_items),
                     "playwright_urls": playwright_urls,
                     "blocked_urls": blocked_urls,
-                    "max_article_links": self.max_article_links,
                     "max_products": self.max_products,
-                    "note": "ALDI: ofertas/folletos semanales, no catálogo permanente completo.",
+                    "note": (
+                        "ALDI expone principalmente ofertas semanales, "
+                        "no catálogo permanente completo."
+                    ),
                 },
             )
 
@@ -237,6 +219,277 @@ class AldiScraper(BaseScraper):
                 supermercado=self.supermercado,
                 error=f"Error inesperado en ALDI: {exc}",
             )
+
+    def _extract_offer_items(
+        self,
+        html: str,
+    ) -> list[dict[str, Any]]:
+        soup = BeautifulSoup(html, "html.parser")
+
+        script = soup.find(
+            "script",
+            id="__NEXT_DATA__",
+        )
+
+        if not isinstance(script, Tag):
+            return []
+
+        content = script.string or script.get_text()
+
+        if not content:
+            return []
+
+        try:
+            next_data = json.loads(content)
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "No se pudo parsear __NEXT_DATA__ de ALDI: %s",
+                exc,
+            )
+            return []
+
+        page_props = (
+            next_data.get("props", {})
+            .get("pageProps", {})
+        )
+
+        api_data_raw = page_props.get("apiData")
+
+        if not api_data_raw:
+            return []
+
+        try:
+            api_data = (
+                json.loads(api_data_raw)
+                if isinstance(api_data_raw, str)
+                else api_data_raw
+            )
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "No se pudo parsear apiData de ALDI: %s",
+                exc,
+            )
+            return []
+
+        if not isinstance(api_data, list):
+            return []
+
+        items: list[dict[str, Any]] = []
+
+        for entry in api_data:
+            if (
+                not isinstance(entry, list)
+                or len(entry) != 2
+                or entry[0] != "OFFER_GET"
+            ):
+                continue
+
+            payload = entry[1]
+
+            if not isinstance(payload, dict):
+                continue
+
+            request_data = payload.get("req") or {}
+
+            # Solo ofertas de España peninsular.
+            if request_data.get("region") not in {None, "pen"}:
+                continue
+
+            response_data = payload.get("res") or {}
+            algolia_data = response_data.get("algoliaDataMap")
+
+            if not isinstance(algolia_data, dict):
+                continue
+
+            for item in algolia_data.values():
+                if not isinstance(item, dict):
+                    continue
+
+                if not item.get("name"):
+                    continue
+
+                current_price = item.get("currentPrice")
+
+                if not isinstance(current_price, dict):
+                    continue
+
+                if current_price.get("priceValue") is None:
+                    continue
+
+                if item.get("isAvailable") is False:
+                    continue
+
+                items.append(item)
+
+        return items
+
+
+    def _build_product_from_offer_item(
+        self,
+        item: dict[str, Any],
+        *,
+        source_url: str,
+    ) -> ScrapedProduct:
+        name = clean_text(item.get("name"))
+
+        if not name:
+            raise ValueError("Oferta ALDI sin nombre")
+
+        current_price = item.get("currentPrice") or {}
+        price = current_price.get("priceValue")
+
+        if price is None:
+            raise ValueError(
+                f"Oferta ALDI sin precio: {name}"
+            )
+
+        brand_raw = item.get("brandName")
+        brand = None
+
+        if brand_raw:
+            brand = clean_text(brand_raw).replace("®", "")
+
+        sales_unit = clean_text(
+            item.get("salesUnit")
+        ) or None
+
+        category = self._extract_offer_category(item)
+        image_url = self._extract_offer_image(item)
+        external_id = self._extract_offer_external_id(item)
+
+        validity = self._extract_offer_validity(item)
+
+        return ScrapedProduct(
+            nombre=name,
+            precio=parse_price(price),
+            supermercado=self.supermercado,
+            marca=brand,
+            categoria=category,
+            unidad_medida=self._guess_unit_from_name(
+                sales_unit or name
+            ),
+            formato=sales_unit,
+            external_id=external_id,
+            url_producto=source_url,
+            imagen_url=image_url,
+            metadata={
+                "source": "aldi_next_data",
+                "source_url": source_url,
+                "product_slug": item.get("productSlug"),
+                "valid_from": (
+                    validity[0] if validity else None
+                ),
+                "valid_to": (
+                    validity[1] if validity else None
+                ),
+                "is_coming_soon": item.get("isComingSoon"),
+                "main_category_id": item.get(
+                    "mainCategoryID"
+                ),
+            },
+        )
+
+
+    def _extract_offer_category(
+        self,
+        item: dict[str, Any],
+    ) -> str:
+        hierarchy = (
+            item.get("hierarchicalCategories")
+            or {}
+        )
+
+        lvl0 = hierarchy.get("lvl0")
+
+        if isinstance(lvl0, list) and lvl0:
+            category = clean_text(lvl0[0])
+
+            if category:
+                return category
+
+        main_category = clean_text(
+            item.get("mainCategoryID")
+        )
+
+        if main_category:
+            return main_category.replace("-", " ").title()
+
+        return "Ofertas"
+
+
+    def _extract_offer_image(
+        self,
+        item: dict[str, Any],
+    ) -> Optional[str]:
+        assets = item.get("assets") or []
+
+        if not isinstance(assets, list):
+            return None
+
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+
+            if asset.get("type") != "primary":
+                continue
+
+            url = asset.get("url")
+
+            if url:
+                return self._absolute_url(url)
+
+        return None
+
+
+    def _extract_offer_external_id(
+        self,
+        item: dict[str, Any],
+    ) -> Optional[str]:
+        object_id = clean_text(item.get("objectID"))
+
+        if object_id:
+            return object_id
+
+        references = item.get("productReferences") or []
+
+        if isinstance(references, list):
+            for reference in references:
+                if not isinstance(reference, dict):
+                    continue
+
+                if reference.get("type") == "KVArticleNumber":
+                    value = clean_text(reference.get("value"))
+
+                    if value:
+                        return value
+
+        return None
+
+
+    def _extract_offer_validity(
+        self,
+        item: dict[str, Any],
+    ) -> Optional[tuple[str, str]]:
+        promotions = item.get("promotionPrices") or []
+
+        if not isinstance(promotions, list):
+            return None
+
+        for promotion in promotions:
+            if not isinstance(promotion, dict):
+                continue
+
+            valid_from = promotion.get(
+                "validFromLocalDate"
+            )
+            valid_to = promotion.get(
+                "validUntilLocalDate"
+            )
+
+            if valid_from and valid_to:
+                return str(valid_from), str(valid_to)
+
+        return None
 
     async def _get_html(self, url: str) -> tuple[Optional[str], bool, bool]:
         try:
@@ -517,7 +770,7 @@ class AldiScraper(BaseScraper):
     @staticmethod
     def _price_context(text: str, start: int, end: int) -> str:
         return text[max(start - 45, 0): min(end + 45, len(text))]
-    
+
     def _extract_main_price_area(
         self,
         soup: BeautifulSoup,
@@ -567,7 +820,7 @@ class AldiScraper(BaseScraper):
             )
 
         return clean_text(cleaned)
-    
+
     def _is_unit_price_context(self, context: str) -> bool:
         text = clean_text(context).lower()
 
@@ -716,7 +969,17 @@ class AldiScraper(BaseScraper):
         seen: set[str] = set()
 
         for product in products:
-            key = f"{product.normalized_supermarket}::{product.normalized_name}"
+            if product.external_id:
+                key = (
+                    f"{product.normalized_supermarket}"
+                    f"::id::{product.external_id}"
+                )
+            else:
+                key = (
+                    f"{product.normalized_supermarket}"
+                    f"::name::{product.normalized_name}"
+                    f"::{product.formato or ''}"
+                )
 
             if key in seen:
                 continue

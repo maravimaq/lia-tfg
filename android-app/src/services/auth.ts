@@ -2,7 +2,6 @@ import { api } from "./api";
 import {
   ForgotPasswordPayload,
   ForgotPasswordResponse,
-  ResetPasswordPayload,
   LoginPayload,
   RegisterPayload,
   TokenResponse,
@@ -22,11 +21,6 @@ export const authService = {
 
   async forgotPassword(payload: ForgotPasswordPayload) {
     const { data } = await api.post<ForgotPasswordResponse>("/auth/forgot-password", payload);
-    return data;
-  },
-
-  async resetPassword(payload: ResetPasswordPayload) {
-    const { data } = await api.post("/auth/reset-password", payload);
     return data;
   },
 

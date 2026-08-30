@@ -105,64 +105,12 @@ INVALID_PREFIXES = {
 }
 
 
-PRODUCT_HINT_WORDS = {
-    "aceite",
-    "agua",
-    "arroz",
-    "azucar",
-    "azúcar",
-    "atun",
-    "atún",
-    "avena",
-    "bebida",
-    "cafe",
-    "café",
-    "caldo",
-    "carne",
-    "cereal",
-    "cereales",
-    "chocolate",
-    "conserva",
-    "detergente",
-    "galleta",
-    "galletas",
-    "gazpacho",
-    "helado",
-    "huevo",
-    "huevos",
-    "jamon",
-    "jamón",
-    "leche",
-    "legumbre",
-    "limpieza",
-    "macarrones",
-    "mantequilla",
-    "pan",
-    "pasta",
-    "patata",
-    "pescado",
-    "pollo",
-    "queso",
-    "salsa",
-    "tomate",
-    "verdura",
-    "verduras",
-    "yogur",
-    "yogurt",
-    "zumo",
-}
-
-
 MEASURE_ONLY_RE = re.compile(
     r"^\s*\d+(?:[,.]\d+)?\s*(x\s*\d+(?:[,.]\d+)?\s*){1,3}"
     r"(cm|mm|m|kg|g|l|ml)?\s*$",
     re.IGNORECASE,
 )
 
-TECHNICAL_MEASURE_RE = re.compile(
-    r"\b\d+(?:[,.]\d+)?\s*x\s*\d+(?:[,.]\d+)?(?:\s*x\s*\d+(?:[,.]\d+)?)?\s*(cm|mm|m)?\b",
-    re.IGNORECASE,
-)
 
 PRICE_LIKE_RE = re.compile(
     r"^\s*\d+(?:[,.]\d{1,2})?\s*€?\s*(/|por)?\s*(kg|g|l|ml|ud|unidad)?\s*$",
@@ -228,9 +176,6 @@ def validate_product_name(name: Any) -> tuple[bool, str | None]:
     if MEASURE_ONLY_RE.match(raw_name):
         return False, "nombre parece ser solo una medida"
 
-    if TECHNICAL_MEASURE_RE.search(raw_name) and not has_product_hint(raw_name):
-        return False, "nombre parece ser una medida técnica, no un producto"
-
     if looks_like_menu_or_action(raw_name):
         return False, "nombre parece ser navegación o acción de interfaz"
 
@@ -250,13 +195,6 @@ def validate_product_price(price: Any) -> tuple[bool, str | None]:
         return False, "precio demasiado alto"
 
     return True, None
-
-
-def has_product_hint(text: Any) -> bool:
-    normalized = normalize_for_matching(text)
-    words = set(normalized.split())
-    normalized_hints = {normalize_for_matching(word) for word in PRODUCT_HINT_WORDS}
-    return bool(words.intersection(normalized_hints))
 
 
 def looks_like_menu_or_action(text: Any) -> bool:
