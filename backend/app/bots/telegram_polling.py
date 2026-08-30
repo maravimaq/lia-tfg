@@ -13,6 +13,8 @@ from app.services.telegram_bot_client import TelegramBotClient
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _extract_message(update: dict[str, Any]) -> tuple[str | None, str | None, int | None]:
