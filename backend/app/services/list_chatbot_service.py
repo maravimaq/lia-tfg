@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -183,11 +183,28 @@ class ListChatbotService:
                 for candidate in equivalent_products
                 if candidate.id_producto != producto.id_producto
             ][: ListChatbotService.MAX_ALTERNATIVES_PER_PRODUCT]
-            cheaper_alternatives = [
-                alternative
+            alternative_purchases = [
+                (
+                    alternative,
+                    ListChatbotService._calculate_equivalent_purchase(
+                        original=producto,
+                        alternative=alternative,
+                        quantity=cantidad,
+                        original_subtotal=subtotal,
+                    ),
+                )
                 for alternative in alternativas
-                if ListChatbotService._to_decimal(alternative.precio_unitario) < precio_unitario
             ]
+
+            cheaper_alternatives = sorted(
+                [
+                    (alternative, purchase)
+                    for alternative, purchase in alternative_purchases
+                    if purchase["ahorro_estimado"] > 0
+                ],
+                key=lambda item: item[1]["ahorro_estimado"],
+                reverse=True,
+            )
 
             if alternativas:
                 alternativas_contexto.append(
@@ -208,7 +225,7 @@ class ListChatbotService:
                                 original_price=precio_unitario,
                                 quantity=cantidad,
                             )
-                            for alternative in cheaper_alternatives[: ListChatbotService.MAX_ALTERNATIVES_PER_PRODUCT]
+                            for alternative, _purchase in cheaper_alternatives[: ListChatbotService.MAX_ALTERNATIVES_PER_PRODUCT]
                         ],
                         "otras_alternativas": [
                             ListChatbotService._alternative_to_context(
@@ -222,22 +239,50 @@ class ListChatbotService:
                 )
 
             if cheaper_alternatives:
-                best = cheaper_alternatives[0]
-                best_price = ListChatbotService._to_decimal(best.precio_unitario)
-                ahorro_unitario = precio_unitario - best_price
-                ahorro_estimado = ahorro_unitario * Decimal(cantidad)
+                best, best_purchase = cheaper_alternatives[0]
+
+                best_price = ListChatbotService._to_decimal(
+                    best.precio_unitario
+                )
+
+                ahorro_estimado = best_purchase["ahorro_estimado"]
+
+                ahorro_unitario = (
+                    ahorro_estimado / Decimal(cantidad)
+                    if cantidad > 0
+                    else Decimal("0")
+                )
+
                 candidatos_ahorro.append(
                     {
                         "producto_original": producto.nombre,
                         "supermercado_original": producto.supermercado,
                         "precio_original": float(precio_unitario),
                         "cantidad": cantidad,
+                        "formato_original": getattr(
+                            producto,
+                            "formato",
+                            None,
+                        ),
                         "alternativa": best.nombre,
                         "supermercado_alternativa": best.supermercado,
                         "precio_alternativa": float(best_price),
+                        "formato_alternativa": getattr(
+                            best,
+                            "formato",
+                            None,
+                        ),
+                        "cantidad_paquetes_alternativa": best_purchase[
+                            "cantidad_paquetes"
+                        ],
+                        "comparacion_por_formato": best_purchase[
+                            "comparacion_por_formato"
+                        ],
                         "ahorro_unitario": float(ahorro_unitario),
                         "ahorro_estimado": float(ahorro_estimado),
-                        "advertencia": "Verificar equivalencia antes de sustituir.",
+                        "advertencia": (
+                            "Verificar equivalencia antes de sustituir."
+                        ),
                     }
                 )
 
@@ -405,16 +450,42 @@ class ListChatbotService:
         equivalent_products: list[Producto],
     ) -> dict[str, Any]:
         cantidad = int(producto_lista.cantidad or 0)
+        subtotal_original = ListChatbotService._to_decimal(
+            producto_lista.precio_estimado
+        )
+
         opciones_por_supermercado: dict[str, dict[str, Any]] = {}
 
         for candidate in equivalent_products:
-            supermercado = candidate.supermercado or "Sin supermercado"
-            candidate_price = ListChatbotService._to_decimal(candidate.precio_unitario)
-            current_option = opciones_por_supermercado.get(supermercado)
+            supermercado = (
+                candidate.supermercado or "Sin supermercado"
+            )
+
+            candidate_price = ListChatbotService._to_decimal(
+                candidate.precio_unitario
+            )
+
+            purchase = (
+                ListChatbotService._calculate_equivalent_purchase(
+                    original=producto,
+                    alternative=candidate,
+                    quantity=cantidad,
+                    original_subtotal=subtotal_original,
+                )
+            )
+
+            subtotal_estimado = purchase["subtotal_estimado"]
+
+            current_option = opciones_por_supermercado.get(
+                supermercado
+            )
 
             if current_option is not None:
-                current_price = ListChatbotService._to_decimal(current_option.get("precio_unitario"))
-                if current_price <= candidate_price:
+                current_subtotal = ListChatbotService._to_decimal(
+                    current_option.get("subtotal_estimado")
+                )
+
+                if current_subtotal <= subtotal_estimado:
                     continue
 
             opciones_por_supermercado[supermercado] = {
@@ -424,9 +495,16 @@ class ListChatbotService:
                 "categoria": candidate.categoria,
                 "supermercado": supermercado,
                 "precio_unitario": float(candidate_price),
-                "subtotal_estimado": float(candidate_price * Decimal(cantidad)),
+                "subtotal_estimado": float(subtotal_estimado),
                 "unidad_medida": candidate.unidad_medida,
-                "es_producto_original": candidate.id_producto == producto.id_producto,
+                "formato": getattr(candidate, "formato", None),
+                "cantidad_paquetes": purchase["cantidad_paquetes"],
+                "comparacion_por_formato": purchase[
+                    "comparacion_por_formato"
+                ],
+                "es_producto_original": (
+                    candidate.id_producto == producto.id_producto
+                ),
             }
 
         return {
@@ -436,10 +514,15 @@ class ListChatbotService:
                 "marca": producto.marca,
                 "categoria": producto.categoria,
                 "supermercado": producto.supermercado,
-                "precio_unitario": float(ListChatbotService._to_decimal(producto.precio_unitario)),
+                "precio_unitario": float(
+                    ListChatbotService._to_decimal(
+                        producto.precio_unitario
+                    )
+                ),
                 "cantidad": cantidad,
-                "subtotal": float(ListChatbotService._to_decimal(producto_lista.precio_estimado)),
+                "subtotal": float(subtotal_original),
                 "unidad_medida": producto.unidad_medida,
+                "formato": getattr(producto, "formato", None),
             },
             "cantidad": cantidad,
             "opciones_por_supermercado": opciones_por_supermercado,
@@ -473,10 +556,22 @@ class ListChatbotService:
                 continue
             seen_product_ids.add(candidate.id_producto)
 
-            candidate_price = ListChatbotService._to_decimal(candidate.precio_unitario)
-            candidate_supermarket = candidate.supermercado or "Sin supermercado"
-            subtotal_estimado = candidate_price * Decimal(cantidad)
-            ahorro_estimado = subtotal_original - subtotal_estimado
+            candidate_price = ListChatbotService._to_decimal(
+            candidate.precio_unitario
+            )
+            candidate_supermarket = (
+                candidate.supermercado or "Sin supermercado"
+            )
+
+            purchase = ListChatbotService._calculate_equivalent_purchase(
+                original=producto,
+                alternative=candidate,
+                quantity=cantidad,
+                original_subtotal=subtotal_original,
+            )
+
+            subtotal_estimado = purchase["subtotal_estimado"]
+            ahorro_estimado = purchase["ahorro_estimado"]
 
             opciones.append(
                 {
@@ -492,6 +587,9 @@ class ListChatbotService:
                     "unidad_medida": candidate.unidad_medida,
                     "es_producto_original": candidate.id_producto == producto.id_producto,
                     "es_otro_supermercado": candidate_supermarket != supermercado_original,
+                    "cantidad_paquetes": purchase["cantidad_paquetes"],
+                    "comparacion_por_formato": purchase["comparacion_por_formato"],
+                    "formato": getattr(candidate, "formato", None),
                 }
             )
 
@@ -538,6 +636,7 @@ class ListChatbotService:
                 "cantidad": cantidad,
                 "subtotal": float(subtotal_original),
                 "unidad_medida": producto.unidad_medida,
+                "formato": getattr(producto, "formato", None)
             },
             "opciones_comparables": opciones[:6],
             "alternativas_mas_baratas_otro_supermercado": alternativas_mas_baratas[:4],
@@ -795,6 +894,161 @@ class ListChatbotService:
         )
         clean = re.sub(r"[^a-z0-9ñ\s]", " ", without_accents)
         return re.sub(r"\s+", " ", clean).strip()
+
+    @staticmethod
+    def _measure_to_base(
+        value: Decimal,
+        unit: str,
+    ) -> tuple[str, Decimal] | None:
+        unit = unit.lower()
+
+        if value <= 0:
+            return None
+
+        if unit == "kg":
+            return "mass", value * Decimal("1000")
+
+        if unit == "g":
+            return "mass", value
+
+        if unit == "l":
+            return "volume", value * Decimal("1000")
+
+        if unit == "cl":
+            return "volume", value * Decimal("10")
+
+        if unit == "ml":
+            return "volume", value
+
+        return None
+
+    @staticmethod
+    def _extract_package_measure(
+        product: Producto,
+    ) -> tuple[str, Decimal] | None:
+        """
+        Devuelve la cantidad del envase en una unidad base común:
+
+        - masa -> gramos
+        - volumen -> mililitros
+
+        Ejemplos:
+        1 KG     -> ("mass", 1000)
+        500 G    -> ("mass", 500)
+        1 L      -> ("volume", 1000)
+        750 ML   -> ("volume", 750)
+        6 x 200 ML -> ("volume", 1200)
+        """
+        sources = (
+            getattr(product, "formato", None),
+            getattr(product, "nombre", None),
+        )
+
+        for raw_value in sources:
+            if not raw_value:
+                continue
+
+            text = str(raw_value).lower().replace(",", ".")
+
+            # Multipacks: "6 x 200 ml", "2×500 g", etc.
+            multipack_match = re.search(
+                r"(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b",
+                text,
+            )
+
+            if multipack_match:
+                package_count = Decimal(multipack_match.group(1))
+                amount = Decimal(multipack_match.group(2))
+                unit = multipack_match.group(3)
+
+                converted = ListChatbotService._measure_to_base(
+                    amount,
+                    unit,
+                )
+
+                if converted is not None:
+                    dimension, base_amount = converted
+                    return dimension, base_amount * package_count
+
+            # Envase simple: "1 kg", "500 g", "750 ml", etc.
+            simple_match = re.search(
+                r"(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b",
+                text,
+            )
+
+            if simple_match:
+                amount = Decimal(simple_match.group(1))
+                unit = simple_match.group(2)
+
+                return ListChatbotService._measure_to_base(
+                    amount,
+                    unit,
+                )
+
+        return None
+
+    @staticmethod
+    def _calculate_equivalent_purchase(
+        *,
+        original: Producto,
+        alternative: Producto,
+        quantity: int,
+        original_subtotal: Decimal,
+    ) -> dict[str, Any]:
+        """
+        Calcula cuánto habría que comprar de la alternativa para igualar
+        la cantidad física del producto original.
+
+        Si no conocemos los tamaños de los envases, mantiene el comportamiento
+        anterior como aproximación.
+        """
+        alternative_price = ListChatbotService._to_decimal(
+            alternative.precio_unitario
+        )
+
+        original_measure = ListChatbotService._extract_package_measure(
+            original
+        )
+        alternative_measure = ListChatbotService._extract_package_measure(
+            alternative
+        )
+
+        package_count = max(int(quantity), 0)
+        comparison_by_format = False
+
+        if (
+            original_measure is not None
+            and alternative_measure is not None
+            and original_measure[0] == alternative_measure[0]
+        ):
+            _, original_amount = original_measure
+            _, alternative_amount = alternative_measure
+
+            target_amount = original_amount * Decimal(quantity)
+
+            if alternative_amount > 0:
+                package_count = int(
+                    (target_amount / alternative_amount).to_integral_value(
+                        rounding=ROUND_CEILING
+                    )
+                )
+                comparison_by_format = True
+
+        estimated_subtotal = (
+            alternative_price * Decimal(package_count)
+        )
+
+        saving = (
+            ListChatbotService._to_decimal(original_subtotal)
+            - estimated_subtotal
+        )
+
+        return {
+            "cantidad_paquetes": package_count,
+            "subtotal_estimado": estimated_subtotal,
+            "ahorro_estimado": saving,
+            "comparacion_por_formato": comparison_by_format,
+        }
 
     @staticmethod
     def _to_decimal(value: Any) -> Decimal:

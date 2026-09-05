@@ -14,6 +14,7 @@ class ProductoBase(BaseModel):
     supermercado: str
     precio_unitario: Decimal
     unidad_medida: str | None = None
+    formato: str | None = None
     imagen_url: str | None = None
 
 
@@ -34,6 +35,7 @@ class ProductoUpdate(BaseModel):
     supermercado: str | None = None
     precio_unitario: Decimal | None = None
     unidad_medida: str | None = None
+    formato: str | None = None
     imagen_url: str | None = None
 
 
