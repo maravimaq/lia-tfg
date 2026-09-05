@@ -21,6 +21,7 @@ class ProductoService:
             supermercado=producto_data.supermercado,
             precio_unitario=producto_data.precio_unitario,
             unidad_medida=producto_data.unidad_medida,
+            formato=producto_data.formato,
             imagen_url=producto_data.imagen_url,
         )
 

@@ -7,7 +7,7 @@ from app.services.list_chatbot_service import ListChatbotService
 import app.services.list_chatbot_service as module
 
 
-def prod(pid, name, price, market, category='Lácteos', brand='Marca', unit='L'):
+def prod(pid, name, price, market, category='Lácteos', brand='Marca', unit='L', formato=None):
     return SimpleNamespace(
         id_producto=pid,
         nombre=name,
@@ -16,6 +16,7 @@ def prod(pid, name, price, market, category='Lácteos', brand='Marca', unit='L')
         categoria=category,
         marca=brand,
         unidad_medida=unit,
+        formato=formato
     )
 
 
@@ -181,3 +182,183 @@ def test_score_additional_branches():
     assert ListChatbotService._score_product_alternative(unknown_a, different_category) == 0
     assert ListChatbotService._score_product_alternative(chocolate, no_chocolate) > 0
     assert ListChatbotService._score_product_alternative(chocolate, family_missing) == 0
+
+def test_product_level_comparison_accounts_for_smaller_package():
+    original = prod(
+        1,
+        'Spaghetti Hacendado',
+        1.15,
+        'Mercadona',
+        category='Pasta',
+        unit='KG',
+        formato='1 KG',
+    )
+    smaller = prod(
+        2,
+        'Spaghetti fino Hacendado',
+        0.80,
+        'Carrefour',
+        category='Pasta',
+        unit='KG',
+        formato='0.5 KG',
+    )
+
+    result = ListChatbotService._build_product_level_comparison(
+        line(1, original, 1, 1.15),
+        original,
+        [original, smaller],
+    )
+
+    assert result is not None
+
+    alternative = next(
+        option
+        for option in result['opciones_comparables']
+        if option['producto_id'] == 2
+    )
+
+    # Para igualar 1 kg hacen falta 2 paquetes de 500 g.
+    assert alternative['cantidad_paquetes'] == 2
+    assert alternative['subtotal_estimado'] == 1.60
+    assert alternative['ahorro_estimado'] == -0.45
+    assert result['tiene_ahorro'] is False
+
+
+def test_product_level_comparison_detects_real_saving_with_smaller_package():
+    original = prod(
+        1,
+        'Spaghetti Hacendado',
+        1.15,
+        'Mercadona',
+        category='Pasta',
+        unit='KG',
+        formato='1 KG',
+    )
+    smaller_but_cheaper = prod(
+        2,
+        'Spaghetti fino',
+        0.50,
+        'Carrefour',
+        category='Pasta',
+        unit='KG',
+        formato='500 G',
+    )
+
+    result = ListChatbotService._build_product_level_comparison(
+        line(1, original, 1, 1.15),
+        original,
+        [original, smaller_but_cheaper],
+    )
+
+    assert result is not None
+
+    alternative = next(
+        option
+        for option in result['opciones_comparables']
+        if option['producto_id'] == 2
+    )
+
+    assert alternative['cantidad_paquetes'] == 2
+    assert alternative['subtotal_estimado'] == 1.00
+    assert alternative['ahorro_estimado'] == 0.15
+    assert result['tiene_ahorro'] is True
+
+def test_product_level_comparison_handles_liters_and_milliliters():
+    original = prod(
+        1,
+        'Leche entera',
+        1.50,
+        'DIA',
+        category='Lácteos',
+        unit='L',
+        formato='1 L',
+    )
+    smaller = prod(
+        2,
+        'Leche entera',
+        1.00,
+        'Mercadona',
+        category='Lácteos',
+        unit='ML',
+        formato='750 ML',
+    )
+
+    result = ListChatbotService._build_product_level_comparison(
+        line(1, original, 1, 1.50),
+        original,
+        [original, smaller],
+    )
+
+    alternative = next(
+        option
+        for option in result['opciones_comparables']
+        if option['producto_id'] == 2
+    )
+
+    # Para cubrir 1 litro hacen falta 2 envases de 750 ml.
+    assert alternative['cantidad_paquetes'] == 2
+    assert alternative['subtotal_estimado'] == 2.00
+    assert alternative['ahorro_estimado'] == -0.50
+    assert result['tiene_ahorro'] is False
+
+
+def test_saving_candidates_do_not_treat_smaller_package_as_saving(
+    monkeypatch,
+    db,
+):
+    original = prod(
+        1,
+        'Spaghetti Hacendado',
+        1.15,
+        'Mercadona',
+        category='Pasta',
+        unit='KG',
+        formato='1 KG',
+    )
+    smaller = prod(
+        2,
+        'Spaghetti fino Hacendado',
+        0.80,
+        'Carrefour',
+        category='Pasta',
+        unit='KG',
+        formato='500 G',
+    )
+
+    lista = SimpleNamespace(
+        id_lista=1,
+        nombre_lista='Compra',
+        total_estimado=Decimal('1.15'),
+        productos=[
+            line(1, original, 1, 1.15),
+        ],
+    )
+
+    monkeypatch.setattr(
+        module.ProductoRepository,
+        'get_all',
+        MagicMock(return_value=[original, smaller]),
+    )
+
+    ctx = ListChatbotService._build_list_context(
+        db,
+        lista,
+        None,
+    )
+
+    analysis = ctx['analisis_precalculado']
+
+    assert analysis['candidatos_ahorro'] == []
+
+    comparison = analysis['comparativa_por_producto'][0]
+    assert comparison['tiene_ahorro'] is False
+    assert (
+        comparison['mejor_alternativa_otro_supermercado']
+        ['cantidad_paquetes']
+        == 2
+    )
+    assert (
+        comparison['mejor_alternativa_otro_supermercado']
+        ['subtotal_estimado']
+        == 1.60
+    )

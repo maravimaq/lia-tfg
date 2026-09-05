@@ -215,6 +215,7 @@ class CatalogImporter:
             supermercado=scraped_product.supermercado,
             precio_unitario=self._to_decimal(scraped_product.precio),
             unidad_medida=scraped_product.unidad_medida or scraped_product.formato,
+            formato=scraped_product.formato,
             imagen_url=scraped_product.imagen_url,
             fecha_actualizacion=datetime.utcnow(),
         )
@@ -255,6 +256,13 @@ class CatalogImporter:
         new_unit = scraped_product.unidad_medida or scraped_product.formato
         if self._should_replace_text(existing_product.unidad_medida, new_unit):
             existing_product.unidad_medida = new_unit
+            changed = True
+
+        if self._should_replace_text(
+            existing_product.formato,
+            scraped_product.formato,
+        ):
+            existing_product.formato = scraped_product.formato
             changed = True
 
         if self._should_replace_text(
