@@ -12,6 +12,7 @@ class HistorialProductoListaResponse(BaseModel):
     categoria: str | None = None
     supermercado: str
     unidad_medida: str | None = None
+    imagen_url: str | None = None
 
     precio_unitario: Decimal
     cantidad: int
