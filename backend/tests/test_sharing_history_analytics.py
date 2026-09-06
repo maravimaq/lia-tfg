@@ -143,8 +143,8 @@ def test_read_only_shared_user_cannot_modify(client):
 def test_finalize_history_repeat_and_analytics(client, db):
     user, token = register_and_login(client)
     shopping_list = create_list(client, token, "Compra mensual")
-    milk = create_product(client, name="Leche entera", price="1.50", category="Lácteos")
-    rice = create_product(client, name="Arroz redondo", price="2.00", category="Despensa")
+    milk = create_product(client, name="Leche entera", price="1.50", category="Lácteos", image_url="https://example.com/leche.jpg")
+    rice = create_product(client, name="Arroz redondo", price="2.00", category="Despensa", image_url="https://example.com/arroz.jpg")
 
     add_product_to_list(
         client,
@@ -181,6 +181,18 @@ def test_finalize_history_repeat_and_analytics(client, db):
     )
     assert detail.status_code == 200
     assert len(detail.json()["productos"]) == 2
+    detail_products = {
+        item["producto_id"]: item
+        for item in detail.json()["productos"]
+    }
+
+    assert detail_products[milk["id_producto"]]["imagen_url"] == (
+        "https://example.com/leche.jpg"
+    )
+
+    assert detail_products[rice["id_producto"]]["imagen_url"] == (
+        "https://example.com/arroz.jpg"
+    )
 
     repeated = client.post(
         f"/historial/{history_id}/repetir",

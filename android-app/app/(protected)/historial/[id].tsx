@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
+import { ProductImage } from "@/src/components/ProductImage";
 import { Colors } from "@/src/constants/colors";
 import { historialService } from "@/src/services/historial";
 import {
@@ -138,6 +139,11 @@ export default function DetalleHistorialScreen() {
 
   const renderProduct = ({ item }: { item: HistorialProductoLista }) => (
     <View style={styles.card}>
+      <ProductImage
+        uri={item.imagen_url}
+        productName={item.nombre_producto}
+        size={72}
+      />
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.nombre_producto}</Text>
 

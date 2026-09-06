@@ -21,6 +21,7 @@ export interface HistorialProductoLista {
   categoria?: string | null;
   supermercado: string;
   unidad_medida?: string | null;
+  imagen_url?: string | null;
 
   precio_unitario: MoneyValue;
   cantidad: number;

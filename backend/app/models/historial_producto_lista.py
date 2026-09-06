@@ -18,6 +18,12 @@ class HistorialProductoLista(Base):
 
     producto_id = Column(Integer, ForeignKey("productos.id_producto"), nullable=True)
 
+    producto = relationship("Producto")
+
+    @property
+    def imagen_url(self) -> str | None:
+        return self.producto.imagen_url if self.producto else None
+
     nombre_producto = Column(String, nullable=False)
     marca = Column(String, nullable=True)
     categoria = Column(String, nullable=True)

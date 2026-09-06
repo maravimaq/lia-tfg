@@ -123,29 +123,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 4,
   },
-  dividerWrap: {
-    marginTop: 26,
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  dividerText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-  },
-  socialRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  socialItem: {
-    flex: 1,
-  },
   footerRow: {
     marginTop: 24,
     flexDirection: "row",
