@@ -64,3 +64,17 @@ class ListChatMessageRepository:
         )
         db.commit()
         return deleted
+
+    @staticmethod
+    def delete_by_lista(
+        db: Session,
+        *,
+        lista_id: int,
+    ) -> int:
+        deleted = (
+            db.query(ListChatMessage)
+            .filter(ListChatMessage.lista_id == lista_id)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        return deleted

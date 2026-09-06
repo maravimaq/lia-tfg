@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 
 from app.models.historial_listas import HistorialListas
+from app.models.lista_compartida import ListaCompartida
 from tests.helpers import (
     add_product_to_list,
     auth_headers,
@@ -56,6 +57,55 @@ def test_share_list_with_edit_and_leave(client):
         headers=auth_headers(guest_token),
     )
     assert leave.status_code == 200
+
+@pytest.mark.integration
+def test_owner_can_delete_shared_list(client):
+    _, owner_token = register_and_login(client)
+
+    guest = register_user(
+        client,
+        email="delete_guest@example.com",
+        username="delete_guest",
+        full_name="Delete Guest",
+    )
+
+    shopping_list = create_list(
+        client,
+        owner_token,
+        "Lista compartida para borrar",
+    )
+
+    share = client.post(
+        f"/listas/{shopping_list['id_lista']}/compartir",
+        headers=auth_headers(owner_token),
+        json={
+            "email_usuario": guest["email"],
+            "tipo_compartido": "edicion",
+        },
+    )
+
+    assert share.status_code == 200
+
+    delete = client.delete(
+        f"/listas/{shopping_list['id_lista']}",
+        headers=auth_headers(owner_token),
+    )
+
+    assert delete.status_code == 200
+
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as db:
+        remaining_shares = (
+            db.query(ListaCompartida)
+            .filter(
+                ListaCompartida.lista_id
+                == shopping_list["id_lista"]
+            )
+            .count()
+        )
+
+        assert remaining_shares == 0
 
 
 @pytest.mark.integration

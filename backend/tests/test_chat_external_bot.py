@@ -58,6 +58,76 @@ def test_list_chat_persists_and_clears_history(client, monkeypatch):
 
 
 @pytest.mark.integration
+def test_delete_list_removes_chat_history(client, monkeypatch):
+    _, token = register_and_login(client)
+    shopping_list = create_list(client, token)
+
+    def fake_process_message(**_kwargs):
+        return ListChatMessageResponse(
+            reply="Respuesta de prueba.",
+            intent="analizar_lista",
+            suggestions=[],
+            context_summary={"productos": 0},
+        )
+
+    monkeypatch.setattr(
+        ListChatbotService,
+        "process_message",
+        staticmethod(fake_process_message),
+    )
+
+    send = client.post(
+        f"/chat/lista/{shopping_list['id_lista']}/message",
+        headers=auth_headers(token),
+        json={"message": "Analiza esta lista"},
+    )
+
+    assert send.status_code == 200
+
+    from app.models.list_chat_message import ListChatMessage
+    from tests.conftest import TestingSessionLocal
+
+    with TestingSessionLocal() as db:
+        messages_before = (
+            db.query(ListChatMessage)
+            .filter(
+                ListChatMessage.lista_id
+                == shopping_list["id_lista"]
+            )
+            .count()
+        )
+
+        assert messages_before == 2
+
+    delete = client.delete(
+        f"/listas/{shopping_list['id_lista']}",
+        headers=auth_headers(token),
+    )
+
+    assert delete.status_code == 200
+    assert delete.json()["message"] == "Lista eliminada correctamente"
+
+    with TestingSessionLocal() as db:
+        messages_after = (
+            db.query(ListChatMessage)
+            .filter(
+                ListChatMessage.lista_id
+                == shopping_list["id_lista"]
+            )
+            .count()
+        )
+
+        assert messages_after == 0
+
+    missing_list = client.get(
+        f"/listas/{shopping_list['id_lista']}",
+        headers=auth_headers(token),
+    )
+
+    assert missing_list.status_code == 404
+
+
+@pytest.mark.integration
 def test_external_bot_link_and_add_product_flow(client):
     _, token = register_and_login(client)
     shopping_list = create_list(client, token, "Compra Telegram")

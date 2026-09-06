@@ -5,6 +5,7 @@ from app.models.lista_compra import ListaCompra
 from app.models.user import User
 from app.repositories.historial_listas_repository import HistorialListasRepository
 from app.repositories.lista_compartida_repository import ListaCompartidaRepository
+from app.repositories.list_chat_message_repository import ListChatMessageRepository
 from app.repositories.lista_compra_repository import ListaCompraRepository
 from app.repositories.producto_lista_repository import ProductoListaRepository
 from app.schemas.lista_compra import (
@@ -214,6 +215,16 @@ class ListaCompraService:
             )
 
         ListaCompraService._validar_lista_no_finalizada(db, lista_id)
+
+        ListChatMessageRepository.delete_by_lista(
+            db,
+            lista_id=lista_id,
+        )
+
+        ListaCompartidaRepository.delete_by_lista(
+            db,
+            lista_id,
+        )
 
         productos = ProductoListaRepository.get_by_lista_id(db, lista_id)
 
